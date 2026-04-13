@@ -1,0 +1,18 @@
+# 外部源码仓库
+/ardupilot-usv/
+/WQ-USV-QGroundControl/
+/src/usv_ros/
+
+# 工作区构建产物
+/src/CMakeLists.txt
+/build/
+/devel/
+/log/
+/.usv_run/
+/ardurover.apj
+
+# IDE / OS
+/.vscode/
+/.idea/
+Thumbs.db
+.DS_Store
