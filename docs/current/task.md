@@ -1,5 +1,5 @@
 # 项目任务记录
-Updated: 2026-04-13T13:01:44Z
+Updated: 2026-04-13T13:34:06Z
 
 > 说明：本文件为按时间追加的历史记录，旧条目保留原始事实，不代表当前现状；如需获取当前状态，请优先阅�?`overview.md`、`INTERFACE.md`、`agent_context.md` 与本文件最新时间段记录�?
 ## 2025-02-14T00:00:00Z intake
@@ -396,6 +396,64 @@ label=trace|fact=task.md 已记录 PowerShell 版和根 README 的证据与验�
 
 ## remeber.summary.8
 label=summary|fact=usv_ws 根仓库现已具备 Bash + PowerShell 双 bootstrap 入口和根 README|impact=跨 Windows/WSL/Linux 设备可按统一结构恢复工作区|next=用户可直接提交根仓库并在新设备执行 bootstrap
+
+## 2026-04-13T13:34:06Z intake.workspace_bootstrap_bat_only
+- codebase-retrieval.hit1=`bootstrap_workspace.ps1 L1-L138`
+- codebase-retrieval.hit2=`README.md L11-L16, L23-L64`
+- codebase-retrieval.hit3=`docs/current/INTERFACE.md L4-L13`
+- codebase-retrieval.hit4=`docs/current/TREE.md L5-L10`
+- scope=`删除 bootstrap_workspace.sh / bootstrap_workspace.ps1，改为唯一 bootstrap_workspace.bat 并写死 GitHub URL`
+
+## 2026-04-13T13:34:06Z implementation.workspace_bootstrap_bat_only
+- created=`bootstrap_workspace.bat`
+  - fixed_url1=`https://github.com/MIGO-OvO/ardupilot-usv.git`
+  - fixed_url2=`https://github.com/MIGO-OvO/WQ-USV-QGroundControl.git`
+  - fixed_url3=`https://github.com/MIGO-OvO/usv_ros.git`
+- removed=`bootstrap_workspace.sh`
+- removed=`bootstrap_workspace.ps1`
+- updated=`README.md`
+- updated=`docs/current/overview.md`
+- updated=`docs/current/plan.md`
+- updated=`docs/current/INTERFACE.md`
+- updated=`docs/current/TREE.md`
+- updated=`docs/current/task.md`
+
+## 2026-04-13T13:34:06Z verify.workspace_bootstrap_bat_only
+- command=`diagnostics bootstrap_workspace.bat README.md docs/current/overview.md docs/current/plan.md docs/current/task.md docs/current/INTERFACE.md docs/current/TREE.md`
+- result=`issues=0`
+- command=`view README.md docs/current/INTERFACE.md docs/current/TREE.md`
+- result=`根入口统一为 bootstrap_workspace.bat`
+
+## remeber.intake.8
+label=scope|fact=用户要求删除 .sh/.ps1，只保留一个 Windows bat 脚本|impact=根仓库入口必须从多脚本收口到单脚本|next=核对 README/TREE/INTERFACE 无旧引用
+
+## remeber.audit.11
+label=url|fact=用户已明确提供 3 个 GitHub 仓库地址|impact=bat 脚本应直接写死 URL，不再保留输入参数|next=README 同步写明内置地址
+
+## remeber.audit.12
+label=cleanup|fact=旧 bootstrap_workspace.sh / bootstrap_workspace.ps1 已删除|impact=后续提交时不会再带入多余入口文件|next=检查 git status 中仅保留 bat 与文档变更
+
+## remeber.exec.16
+label=bat|fact=bootstrap_workspace.bat 已能按固定 URL 拉取三端仓库并执行 submodule update|impact=Windows 侧用户可直接双击或命令行执行|next=如需可再补 pause 或日志文件输出
+
+## remeber.exec.17
+label=docs|fact=README 与 docs/current 已全部切换为 bat 唯一入口|impact=部署说明与实际文件状态一致|next=用户重新提交 git 验证
+
+## remeber.exec.18
+label=verify|fact=本轮 diagnostics 为零问题|impact=收口后的根仓库达到可提交状态|next=执行 git add/commit
+
+## remeber.docs.16
+label=tree|fact=TREE 顶部根文件列表已去除 sh/ps1，仅保留 README 与 bat|impact=目录树不再误导用户使用旧脚本|next=后续若再加根工具文件需同步 TREE
+
+## remeber.docs.17
+label=interface|fact=INTERFACE 入口段已改为 bat + 固定 URL|impact=接口文档已不再暴露旧参数式入口|next=若 URL 变更需同步 README 与 bat
+
+## remeber.docs.18
+label=plan|fact=plan 已切换为 bat-only 收口方案|impact=当前有效技术计划与根仓库状态一致|next=如用户再要求包装器只需在此基础增量修改
+
+## remeber.summary.9
+label=summary|fact=usv_ws 根仓库现在只保留 README + bootstrap_workspace.bat 作为入口|impact=Windows 部署路径最简，减少多脚本混淆|next=用户重新执行 git commit
+
 
 ## 2026-03-15T00:20:00Z implementation.startup_scripts
 - created=`src/usv_ros/scripts/common_env.sh`

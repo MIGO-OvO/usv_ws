@@ -1,5 +1,5 @@
 # 项目概览
-Updated: 2026-04-13T13:01:44Z
+Updated: 2026-04-13T13:34:06Z
 
 ## 1. 范围
 - 地面端：`WQ-USV-QGroundControl/`
@@ -37,8 +37,7 @@ bridge(sysid=1/compid=191) -[2Hz×8字段]-> mavlink-routerd -[UART]-> 飞控
 - `mavlink_trigger_node.py` 将 `31014` 转换为 `CALXYZA\r\n` 并发布到 `/usv/pump_command`。
 - `usv_mavlink_router_bridge.py` 通过 `pymavlink` 向 `mavlink-routerd` 发送 `USV_VOLT`、`USV_ABS`、`PUMP_X/Y/Z/A`、`USV_STAT`、`USV_PKT`（线程安全队列模式）。
 - `start_usv_all.sh`、`stop_usv_all.sh`、`status_usv_all.sh`（含 ROS 节点级检查 + MAVROS 连通检查 + bridge 诊断摘要）。
-- `bootstrap_workspace.sh` 在根目录拉取 `ardupilot-usv`、`WQ-USV-QGroundControl`、`src/usv_ros`，保留 `usv_ws` 作为总管理仓库入口。
-- `bootstrap_workspace.ps1` 为 Windows PowerShell 提供等价的外部仓库拉取入口。
+- `bootstrap_workspace.bat` 为 Windows 提供唯一的外部仓库拉取入口，固定拉取 `ardupilot-usv`、`WQ-USV-QGroundControl`、`src/usv_ros`。
 - 根 `.gitignore` 忽略三方源码目录与本地构建产物，保证总管理仓库只提交文档与入口文件。
 - 根 `README.md` 汇总 clone、bootstrap、三端构建入口与 Git 管理策略。
 - `USVPayloadFactGroup` 解析 `NAMED_VALUE_FLOAT`、`DEBUG_VECT`、`DEBUG`，维护 `linkActive`（5s 超时）、`packetCount`、诊断计数。
@@ -51,8 +50,8 @@ bridge(sysid=1/compid=191) -[2Hz×8字段]-> mavlink-routerd -[UART]-> 飞控
 - `mavlink-routerd` 为必需依赖；未包含自动安装逻辑。
 - MAVROS 默认连接 `udp://127.0.0.1:14550@`；bridge 默认连接 `tcp:127.0.0.1:5760`。
 - `mission_coordinator_node.py` 未包含在默认 launch 主链路。
-- 根脚本要求调用者显式提供三个外部仓库 URL；当前仓库不内置远端地址。
-- PowerShell 脚本只负责 clone/bootstrap；ROS/QGC/ArduPilot 仍按各自仓库原生构建入口执行。
+- 根仓库只保留一个 Windows `.bat` 引导脚本；不再保留 `.sh`/`.ps1` bootstrap 入口。
+- `.bat` 已写死 3 个外部源码仓库 URL；ROS/QGC/ArduPilot 仍按各自仓库原生构建入口执行。
 
 ## 6. 稳定版本标签
 | 仓库 | 标签 | commit | 说明 |

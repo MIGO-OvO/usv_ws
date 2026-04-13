@@ -1,16 +1,14 @@
 # 接口速查
-Updated: 2026-04-13T13:01:44Z
+Updated: 2026-04-13T13:34:06Z
 
 ## 0. 总管理仓库入口
 - 根文档：`README.md`
-- 根脚本（Bash）：`bootstrap_workspace.sh`
-- 根脚本（PowerShell）：`bootstrap_workspace.ps1`
-- 输入：`<ardupilot_url> <qgc_url> <usv_ros_url>` 或环境变量 `ARDUPILOT_URL` `QGC_URL` `USV_ROS_URL`
-- 可选版本：`ARDUPILOT_REF` `QGC_REF` `USV_ROS_REF`
+- 根脚本（Windows）：`bootstrap_workspace.bat`
+- 内置仓库地址：`https://github.com/MIGO-OvO/ardupilot-usv.git` `https://github.com/MIGO-OvO/WQ-USV-QGroundControl.git` `https://github.com/MIGO-OvO/usv_ros.git`
 - 克隆目标：`ardupilot-usv/` `WQ-USV-QGroundControl/` `src/usv_ros/`
 - 同步动作：`git clone --recursive` + `git submodule update --init --recursive`
 - 根忽略文件：`.gitignore`
-- 忽略目录：`/ardupilot-usv/` `/WQ-USV-QGroundControl/` `/src/usv_ros/` `/build/` `/devel/` `/log/` `/.usv_run/`
+- 忽略目录：`/ardupilot-usv/` `/WQ-USV-QGroundControl/` `/src/usv_ros/` `/src/CMakeLists.txt` `/build/` `/devel/` `/log/` `/.usv_run/`
 
 ## 1. 启停脚本
 目录：`src/usv_ros/scripts/`

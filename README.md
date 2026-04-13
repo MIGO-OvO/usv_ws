@@ -1,6 +1,6 @@
 # usv_ws 总管理仓库
 
-Updated: 2026-04-13T13:01:44Z
+Updated: 2026-04-13T13:34:06Z
 
 ## 1. 目标
 本仓库只负责 `usv_ws` 工作区的总管理入口，不直接纳入以下外部源码仓库的版本历史：
@@ -10,65 +10,32 @@ Updated: 2026-04-13T13:01:44Z
 
 根仓库保留：
 - `docs/current/` 技术文档
-- `bootstrap_workspace.sh`
-- `bootstrap_workspace.ps1`
+- `bootstrap_workspace.bat`
 - `.gitignore`
 
 ## 2. 获取总管理仓库
 ```bash
-git clone <your-usv-ws-manager-repo-url> usv_ws
+git clone https://github.com/MIGO-OvO/usv_ws.git usv_ws
 cd usv_ws
 ```
 
 ## 3. Bootstrap 外部源码仓库
-### 3.1 Bash / WSL / Linux
-```bash
-./bootstrap_workspace.sh <ardupilot_url> <qgc_url> <usv_ros_url>
+仅保留 Windows 批处理入口：
+```bat
+bootstrap_workspace.bat
 ```
 
-使用环境变量：
-```bash
-ARDUPILOT_URL=<ardupilot_url> \
-QGC_URL=<qgc_url> \
-USV_ROS_URL=<usv_ros_url> \
-./bootstrap_workspace.sh
-```
-
-可选固定版本：
-```bash
-ARDUPILOT_REF=<branch|tag|commit> \
-QGC_REF=<branch|tag|commit> \
-USV_ROS_REF=<branch|tag|commit> \
-./bootstrap_workspace.sh <ardupilot_url> <qgc_url> <usv_ros_url>
-```
-
-### 3.2 Windows PowerShell
-```powershell
-powershell -ExecutionPolicy Bypass -File .\bootstrap_workspace.ps1 <ardupilot_url> <qgc_url> <usv_ros_url>
-```
-
-使用环境变量：
-```powershell
-$env:ARDUPILOT_URL = '<ardupilot_url>'
-$env:QGC_URL = '<qgc_url>'
-$env:USV_ROS_URL = '<usv_ros_url>'
-.\bootstrap_workspace.ps1
-```
-
-可选固定版本：
-```powershell
-$env:ARDUPILOT_REF = '<branch|tag|commit>'
-$env:QGC_REF = '<branch|tag|commit>'
-$env:USV_ROS_REF = '<branch|tag|commit>'
-.\bootstrap_workspace.ps1
-```
+脚本内置仓库地址：
+- `https://github.com/MIGO-OvO/ardupilot-usv.git`
+- `https://github.com/MIGO-OvO/WQ-USV-QGroundControl.git`
+- `https://github.com/MIGO-OvO/usv_ros.git`
 
 ## 4. Bootstrap 后目录结构
 ```text
 usv_ws/
 ├─ .gitignore
-├─ bootstrap_workspace.sh
-├─ bootstrap_workspace.ps1
+├─ README.md
+├─ bootstrap_workspace.bat
 ├─ docs/
 ├─ ardupilot-usv/
 ├─ WQ-USV-QGroundControl/
@@ -110,6 +77,7 @@ git submodule update --init --recursive
 - `/ardupilot-usv/`
 - `/WQ-USV-QGroundControl/`
 - `/src/usv_ros/`
+- `/src/CMakeLists.txt`
 - `/build/`
 - `/devel/`
 - `/log/`
@@ -124,6 +92,7 @@ git commit -m "Feat: add workspace bootstrap entry"
 ```
 
 ## 7. 约束
-- 本仓库不内置三方源码仓库远端 URL，执行 bootstrap 时必须显式传入。
+- 本仓库只保留 `bootstrap_workspace.bat` 一个 Windows 入口脚本。
+- `.bat` 已写死 3 个外部源码仓库地址，不再要求执行时传入 URL。
 - `ardupilot-usv` 固件构建环境为 WSL Ubuntu。
-- PowerShell 脚本负责 clone/bootstrap，不替代 ROS/QGC/固件各自仓库内的原生构建流程。
+- 批处理脚本只负责 clone/bootstrap；ROS/QGC/ArduPilot 仍按各自仓库原生构建入口执行。

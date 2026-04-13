@@ -1,12 +1,11 @@
 # 关键目录树
-Generated: 2026-04-13T13:01:44Z
+Generated: 2026-04-13T13:34:06Z
 
 ```text
 .
 ├─ .gitignore
 ├─ README.md
-├─ bootstrap_workspace.sh
-├─ bootstrap_workspace.ps1
+├─ bootstrap_workspace.bat
 ├─ WQ-USV-QGroundControl/
 │  ├─ README.md
 │  ├─ src/
