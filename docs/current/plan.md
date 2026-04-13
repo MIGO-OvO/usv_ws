@@ -1,60 +1,49 @@
 # 技术计划
-Updated: 2026-04-13T13:34:06Z
+Updated: 2026-04-13T22:06:23+08:00
 
 ## 1. 当前目标
-- 删除根目录脚本 `bootstrap_workspace.sh` 与 `bootstrap_workspace.ps1`，收口为唯一 Windows 批处理入口 `bootstrap_workspace.bat`。
-- 在 `bootstrap_workspace.bat` 中写死外部源码仓库地址：`ardupilot-usv`、`WQ-USV-QGroundControl`、`usv_ros`。
-- 更新根 `README.md`，说明总管理仓库 clone、唯一 bootstrap 入口、三端构建入口与 Git 管理策略。
-- 保留根 `.gitignore`，确保总管理仓库仅跟踪文档与入口脚本，不纳入三方源码与本地构建产物。
-- 更新 `docs/current/overview.md`、`INTERFACE.md`、`TREE.md`、`task.md`，移除 `.sh/.ps1` 入口引用。
+- 汇总 `2026-03-31` 至 `2026-04-13` 三端源码仓库中作者 `MIGO_12` 的 git 变更。
+- 按 ROS / QGC / ArduPilot 三端整理本周期工作成果、问题与阶段性结论。
+- 生成一份可直接用于开发汇报的 PPT 文案 markdown 到 `docs/current/`。
+- 更新 `docs/current/task.md`、`docs/current/TREE.md`，记录证据与新增文档索引。
 
 ## 2. 影响文件
-- `bootstrap_workspace.bat`
-- `README.md`
-- `.gitignore`
-- `docs/current/overview.md`
 - `docs/current/plan.md`
 - `docs/current/task.md`
-- `docs/current/INTERFACE.md`
 - `docs/current/TREE.md`
-- 删除：`bootstrap_workspace.sh`
-- 删除：`bootstrap_workspace.ps1`
+- 新增：`docs/current/ppt_progress_report_20260331_20260413.md`
 
 ## 3. 受影响符号与范围
-- `bootstrap_workspace.bat L1-L53 ~+53`
-- `README.md §1-§7 ~+99/-31`
-- `.gitignore L1-L19 ~0`
-- `docs/current/overview.md §4-§7 ~+2/-3`
-- `docs/current/INTERFACE.md §0 ~+4/-6`
-- `docs/current/TREE.md 头部根文件列表 ~+1/-2`
-- `docs/current/task.md 追加本次证据、删除记录、验证结果 ~+20`
+- `docs/current/ppt_progress_report_20260331_20260413.md L1-L93 ~+93`
+- `docs/current/plan.md L1-L41 ~+41/-61`
+- `docs/current/task.md 文末追加 ~+20`
+- `docs/current/TREE.md docs/current 段 ~+1`
 
 ## 4. 执行步骤
-1. 新建 `bootstrap_workspace.bat`，固定仓库 URL 为：`https://github.com/MIGO-OvO/ardupilot-usv.git`、`https://github.com/MIGO-OvO/WQ-USV-QGroundControl.git`、`https://github.com/MIGO-OvO/usv_ros.git`。
-2. 删除 `bootstrap_workspace.sh` 与 `bootstrap_workspace.ps1`，根仓库只保留 `.bat`。
-3. 更新 `README.md`：只保留 `.bat` 用法，移除 Bash/PowerShell 章节。
-4. 更新 `overview.md`、`INTERFACE.md`、`TREE.md`：入口描述统一为 `bootstrap_workspace.bat`。
-5. 更新 `task.md`：记录删除文件、固定 URL、验证输出。
-6. 验证：`diagnostics(bootstrap_workspace.bat,README.md,docs/current/*.md)` 与 `view` 抽查根目录树、README、bat 一致性。
+1. 使用 `git log --since --until --author="MIGO_12"` 分别统计 `src/usv_ros`、`WQ-USV-QGroundControl`、`ardupilot-usv`。
+2. 提取提交数量、增删行、涉及文件数、高频修改文件与代表性提交。
+3. 结合 `docs/current/overview.md`、`roadmap.md`、`task.md` 已有上下文，整理为逐页 PPT 文案。
+4. 新建 `docs/current/ppt_progress_report_20260331_20260413.md`。
+5. 追加 `task.md` 技术证据，更新 `TREE.md` 新文件索引。
+6. 验证：`diagnostics(docs/current/*.md)=0`，并用 `view` 抽查新增文档内容与目录树。
 
 ## 5. 验收条件
-- 根目录只保留一个引导脚本：`bootstrap_workspace.bat`。
-- `.bat` 内存在 3 个固定 GitHub URL，遗漏数 `0`。
-- `README.md` 不再出现 `bootstrap_workspace.sh` 或 `bootstrap_workspace.ps1`。
-- `docs/current/overview.md`、`plan.md`、`task.md`、`INTERFACE.md`、`TREE.md` 更新时间戳为本次执行。
+- PPT 文案覆盖：总览、三端成果、关键突破、问题与解决、量化结果、后续计划。
+- 统计口径明确为时间窗内作者 `MIGO_12` 的提交。
+- 文案中的稳定版本标签与 commit 与现有 `overview.md` 一致。
+- `task.md` 追加本次证据；`TREE.md` 包含新增文档。
 - diagnostics 结果 `0` 条。
 
 ## 6. 回滚
 ```bash
-git restore docs/current/overview.md docs/current/plan.md docs/current/task.md docs/current/INTERFACE.md docs/current/TREE.md README.md .gitignore
-if git ls-files --error-unmatch bootstrap_workspace.bat >/dev/null 2>&1; then git restore bootstrap_workspace.bat; else rm -f bootstrap_workspace.bat; fi
+git restore docs/current/plan.md docs/current/task.md docs/current/TREE.md docs/current/ppt_progress_report_20260331_20260413.md
 ```
 
 ## remeber.plan.1
-label=scope|fact=用户要求只保留一个 Windows bat 引导脚本|impact=必须删除根目录 .sh 和 .ps1 入口|next=同步 README/docs 去除旧引用
+label=scope|fact=本次任务是基于 git 历史生成汇报文档而非修改三端业务代码|impact=输出必须忠于提交事实和现有文档|next=按仓库分别统计提交与主题
 
 ## remeber.plan.2
-label=url|fact=仓库地址已由用户明确提供 GitHub URL|impact=bat 脚本应直接写死地址而非再要求输入参数|next=在 README 与 INTERFACE 标明内置 URL
+label=data|fact=用户要求覆盖 2026-03-31 到 2026-04-13 两周窗口且只描述本人工作|impact=统计必须按 author=MIGO_12 过滤|next=记录每仓 commit 数与代表性提交
 
 ## remeber.plan.3
-label=consistency|fact=根目录树、README、INTERFACE 必须都只出现 bootstrap_workspace.bat|impact=任何旧入口残留都会误导部署|next=用 diagnostics+view 双重核对
+label=docs|fact=需把结果保存到 docs 目录下且遵守 current 文档体系|impact=应新增单一 PPT 文案文件并同步 TREE/task|next=落盘后做 diagnostics 与抽查

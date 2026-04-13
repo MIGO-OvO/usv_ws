@@ -1008,3 +1008,33 @@ label=layout|fact=Monitor 页右侧卡片已改为泵控在上、通信诊断在
 
 ## remeber.exec.20
 label=chart|fact=电压/吸光度图已从 auto domain 改为带最小跨度的自适应比例尺|impact=小幅波动不再贴底，趋势更容易观察|next=用真实低噪声样本验证缩放体感
+
+## 2026-04-13T22:06:23+08:00 report.ppt_progress_collection
+- codebase-retrieval.hit1=`docs/current/task.md L1-L10,L731-L735`
+- codebase-retrieval.hit2=`docs/current/INTERFACE.md L1-L11`
+- codebase-retrieval.hit3=`docs/current/overview.md L1-L79`
+- code-examples.dir=`missing`
+- git.window=`2026-03-31 00:00:00` ~ `2026-04-13 23:59:59`
+- git.author=`MIGO_12`
+- repo.status=`src/usv_ros clean; WQ-USV-QGroundControl clean; ardupilot-usv clean`
+- stats.ros=`commits=55 insertions=5097 deletions=2128 files=48`
+- stats.qgc=`commits=12 insertions=3313 deletions=2308 files=48`
+- stats.firmware=`commits=6 insertions=292 deletions=135 files=8`
+- hotspots.ros=`scripts/usv_mavlink_router_bridge.py(16); scripts/mavlink_trigger_node.py(14); scripts/usv_mavlink_bridge.py(11); scripts/status_usv_all.sh(10)`
+- hotspots.qgc=`custom/res/USVPayloadPanel.qml(8); custom/res/USVFlyViewCustomLayer.qml(5); custom/src/USVPayloadFactGroup.cc(5)`
+- hotspots.firmware=`libraries/GCS_MAVLink/MAVLink_routing.cpp(3); Rover/GCS_MAVLink_Rover.cpp(2); Rover/sensors.cpp(2)`
+- representative.commits=`4508b49b,668a30f2,63ae83ec,cb1520e1,19bf47ec,594a111a,2deb0ea3,dc4c848a,07118b25`
+- changed=`docs/current/ppt_progress_report_20260331_20260413.md`
+- changed=`docs/current/plan.md`
+- pending=`docs/current/TREE.md update`
+
+## remeber.intake.31
+label=scope|fact=用户需要基于过去两周三端 git 记录制作开发汇报文案|impact=输出必须覆盖 ROS/QGC/飞控三端且聚焦本人提交|next=按 author=MIGO_12 汇总并写成逐页讲稿
+## remeber.audit.31
+label=evidence|fact=三端仓库在统计时工作区均为 clean 且可直接读取 git log|impact=汇报内容可直接建立在提交历史和现有 docs/current 上|next=用提交主题归并为链路稳定/界面交互/飞控收口三类
+## remeber.exec.31
+label=report_doc|fact=已生成 docs/current/ppt_progress_report_20260331_20260413.md|impact=可直接作为 PPT 制作底稿和汇报讲稿|next=同步 TREE 和 diagnostics
+## remeber.docs.31
+label=stats|fact=本周期统计结果为 ROS55/QGC12/飞控6 共73提交|impact=汇报可量化展示工作量与三端投入分布|next=在口头汇报时突出稳定标签与链路架构收口
+## remeber.summary.15
+label=summary|fact=两周核心成果是把三端 MAVLink 载荷链路收口为稳定、可诊断、可回滚的 v0.2.0-stable 基线|impact=后续可在此基线上推进航点采样、数据历史和更多运维能力|next=按新文档制作正式 PPT 页面
