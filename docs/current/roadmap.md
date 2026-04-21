@@ -160,60 +160,27 @@ curl http://127.0.0.1:5000/api/data/sampling/<filename>/download > test.csv
 
 ---
 
-## #6 QGC 采样数据图表页
+## #6 QGC 采样数据图表页 ✅ 已完成
 
-### 现状
-QGC 有三个 USV 自定义 QML 面板：
-- `USVPayloadPanel.qml` — 飞行视图叠加层（状态 + 按钮）
-- `USVPayloadDetailPanel.qml` — 详情面板（泵角度 + 诊断）
-- `USVPayloadSummaryStrip.qml` — 摘要条
+> **实现方式变更**：从原计划的飞行视图内嵌面板 / AnalyzeView 子页面，改为与航行/规划/配置同级的**独立顶层页面** `USVSamplingDataView.qml`。原飞行视图中的迷你图表面板 `USVSamplingChartPanel` 已删除，所有采样数据集中到新页面。
 
-均为数值显示，无历史曲线图。
+### 已实现内容
+- 独立顶层页面，通过视图选择菜单的"采样数据"按钮进入
+- 实时电压/吸光度双Y轴滚动曲线（60秒窗口，2Hz，暂停/恢复/清空）
+- 采样任务概览：连接状态、采样步骤进度、已采集样本数、包计数、采样时长
+- 泵组状态详情：四路步进泵角度实时文字展示、PID模式/误差值、链路状态
+- 统计分析：电压与吸光度的最小/最大/平均/标准差（增量在线算法）
+- 新增 MAVLink 遥测字段：`USV_STEP`、`USV_STOT`、`USV_SCNT`、`USV_PERR`、`USV_PMOD`
+- `USVPayloadFactGroup` 扩展：`stepCurrent`、`stepTotal`、`sampleCount`、`pidError`、`pidMode`
 
 ### 改动文件
-- `WQ-USV-QGroundControl/custom/res/USVSamplingChartPanel.qml` — 新建
-- `WQ-USV-QGroundControl/custom/custom.qrc` — 注册新 QML
-- `WQ-USV-QGroundControl/custom/src/USVPlugin.cc` — 注册到飞行视图
-
-### 实施细节
-
-#### 新建 USVSamplingChartPanel.qml
-1. 独立的全高度面板（类似 QGC 的分析视图风格）
-2. 数据来源：`USVPayloadFactGroup` 的 `voltage` 和 `absorbance` Fact
-3. 使用 QML `ChartView` + `LineSeries` 组件：
-   - X 轴：时间（滚动窗口，最近 60 秒）
-   - Y 轴左：电压 (V)
-   - Y 轴右：吸光度 (AU)
-4. 底部信息栏：当前值、最大/最小值、平均值
-5. 工具栏：暂停/恢复滚动、清空、导出截图
-
-#### 数据缓存
-在 `USVPayloadFactGroup` 或 QML 层维护滚动数据队列：
-```qml
-property var voltageHistory: []    // [{time, value}, ...]
-property var absorbanceHistory: []
-property int maxPoints: 120        // 60s × 2Hz
-
-Timer {
-    interval: 500
-    repeat: true
-    running: _linkOk
-    onTriggered: {
-        var now = new Date()
-        voltageHistory.push({time: now, value: _voltageFact.value})
-        if (voltageHistory.length > maxPoints) voltageHistory.shift()
-        // absorbance 同理
-    }
-}
-```
-
-#### 入口注册
-在 `USVPlugin.cc` 中通过 `QmlComponentInfo` 注册新面板，或在 `USVFlyViewCustomLayer.qml` 中通过按钮切换显示。
-
-### 验证
-- QGC 连接飞控后，打开图表面板能看到电压/吸光度实时曲线
-- 曲线平滑滚动，数据与面板数值一致
-- 断连后曲线停止，重连后恢复
+- `WQ-USV-QGroundControl/custom/res/USVSamplingDataView.qml` — 新建独立页面
+- `WQ-USV-QGroundControl/custom/res/USVSamplingDataTokens.js` — 页面布局常量
+- `WQ-USV-QGroundControl/custom/res/USVSelectViewDropdown.qml` — 新增入口按钮
+- `WQ-USV-QGroundControl/custom/src/USVPayloadFactGroup.h/cc` — 扩展 Fact 字段
+- `WQ-USV-QGroundControl/custom/res/USVPayloadFactGroup.json` — 扩展元数据
+- `WQ-USV-QGroundControl/custom/CMakeLists.txt` — 注册新 QML 文件
+- `src/usv_ros/scripts/usv_mavlink_router_bridge.py` — 新增 5 个遥测字段
 
 ---
 

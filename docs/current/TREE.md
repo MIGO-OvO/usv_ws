@@ -10,6 +10,25 @@ Generated: 2026-04-13T22:06:23+08:00
 │  ├─ README.md
 │  ├─ src/
 │  └─ custom/
+│     ├─ src/
+│     │  ├─ USVPlugin.h/cc
+│     │  ├─ USVOptions.h/cc
+│     │  ├─ USVPayloadFactGroup.h/cc
+│     │  ├─ FirmwarePlugin/
+│     │  └─ AutoPilotPlugin/
+│     └─ res/
+│        ├─ USVSamplingDataView.qml        # 采样数据独立页面
+│        ├─ USVSamplingDataTokens.js        # 采样数据页面布局常量
+│        ├─ USVSelectViewDropdown.qml       # 视图选择菜单（含采样数据入口）
+│        ├─ USVPayloadPanel.qml
+│        ├─ USVPayloadDetailPanel.qml
+│        ├─ USVPayloadSummaryStrip.qml
+│        ├─ USVFlyViewCustomLayer.qml
+│        ├─ USVInstrumentPanel.qml
+│        ├─ USVActionBar.qml
+│        ├─ USVChecklist.qml
+│        ├─ USVToolBarButton.qml
+│        └─ USVPayloadFactGroup.json
 ├─ ardupilot-usv/
 │  ├─ Rover/
 │  ├─ Tools/
