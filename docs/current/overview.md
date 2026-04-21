@@ -1,5 +1,5 @@
 # 项目概览
-Updated: 2026-04-13T13:34:06Z
+Updated: 2026-04-15T00:00:00Z
 
 ## 1. 范围
 - 地面端：`WQ-USV-QGroundControl/`
@@ -44,12 +44,23 @@ bridge(sysid=1/compid=191) -[2Hz×8字段]-> mavlink-routerd -[UART]-> 飞控
 - ArduRover 固件 `GCS_MAVLink_Rover.cpp` 缓存 `NAMED_VALUE_FLOAT`；`sensors.cpp` 以 2Hz 受控重发；`MAVLink_routing.cpp` 阻断直转发。
 - `web_config_server.py` 提供硬件配置 API、任务控制 API、进样泵 API、Socket.IO 状态推送。
 - `pump_control_node.py` 提供四路步进泵、进样泵、自动化步骤执行、分光采集。
+- `mavlink_trigger_node.py` 已完成阶段一第一轮闭环增强：
+  - 支持 `hold_settle_time` / `stable_check_timeout` / `stable_speed_threshold` / `stable_yaw_rate_threshold`
+  - 支持 waypoint 级 `loop_count` / `retry_count` / `hold_before_sampling_s` / `on_fail`
+  - 支持航点去重状态机与 `/usv/mission_status` 任务阶段发布
+- `web_config_server.py` 新增航点采样配置 CRUD API（`/api/waypoint-sampling`）和任务配置导入导出（`/api/mission-config/export|import`）。
+- 前端新增 `WaypointSamplingCard` 航点采样编辑器和任务配置导入/导出入口。
+- 前端启动任务时自动携带最新 `waypoint_sampling` 下发。
 - QGC `USVPayloadPanel.qml` 命令发送 `showError=true`，命令超时/拒绝时弹出 toast。
+- QGC `USVSamplingDataView.qml` 采样数据独立顶层页面（与航行/规划/配置同级），包含实时电压/吸光度曲线、采样任务概览、泵组状态与PID监控、统计分析。
+- `usv_mavlink_router_bridge.py` 新增 `USV_STEP`/`USV_STOT`/`USV_SCNT`/`USV_PERR`/`USV_PMOD` 遥测字段，支持采样步骤进度、样本计数、PID状态上报。
 
 ## 5. 当前运行约束
 - `mavlink-routerd` 为必需依赖；未包含自动安装逻辑。
 - MAVROS 默认连接 `udp://127.0.0.1:14550@`；bridge 默认连接 `tcp:127.0.0.1:5760`。
 - `mission_coordinator_node.py` 未包含在默认 launch 主链路。
+- 阶段一稳定判定当前为 ROS 侧轻量实现，依赖 `/mavros/local_position/velocity_local` 与 `/mavros/imu/data`；未引入位置漂移闭环。
+- 航点级采样配置当前由 `sampling_config.json` / Web `waypoint_sampling` 驱动，尚未进入 QGC Plan 原生任务模型。
 - 根仓库只保留一个 Windows `.bat` 引导脚本；不再保留 `.sh`/`.ps1` bootstrap 入口。
 - `.bat` 已写死 3 个外部源码仓库 URL；ROS/QGC/ArduPilot 仍按各自仓库原生构建入口执行。
 

@@ -1038,3 +1038,96 @@ label=report_doc|fact=已生成 docs/current/ppt_progress_report_20260331_202604
 label=stats|fact=本周期统计结果为 ROS55/QGC12/飞控6 共73提交|impact=汇报可量化展示工作量与三端投入分布|next=在口头汇报时突出稳定标签与链路架构收口
 ## remeber.summary.15
 label=summary|fact=两周核心成果是把三端 MAVLink 载荷链路收口为稳定、可诊断、可回滚的 v0.2.0-stable 基线|impact=后续可在此基线上推进航点采样、数据历史和更多运维能力|next=按新文档制作正式 PPT 页面
+
+
+## 2026-04-15T00:00:00Z implementation.stage1_auto_sampling_closure
+- changed=`src/usv_ros/scripts/mavlink_trigger_node.py`
+  - added=`MissionState / WaypointSamplingState 枚举`
+  - added=`/usv/mission_status publisher`
+  - added=`/mavros/local_position/velocity_local /mavros/imu/data 订阅`
+  - added=`稳定判定参数: hold_settle_time / stable_check_timeout / stable_speed_threshold / stable_yaw_rate_threshold`
+  - added=`航点去重状态机与 waypoint_states`
+  - added=`waypoint_sampling 配置解析: enabled / loop_count / retry_count / hold_before_sampling_s / on_fail`
+  - added=`失败策略: HOLD / SKIP / ABORT + retry_count`
+  - changed=`_waypoint_cb() 到点后改为状态机驱动的异步采样触发`
+  - changed=`_resume_auto_if_mission_exists() 增加 mission_status 阶段发布`
+- changed=`src/usv_ros/scripts/web_config_server.py`
+  - added=`DEFAULT_CONFIG.waypoint_sampling`
+  - added=`ConfigManager._normalize_waypoint_sampling()`
+  - changed=`save/load/get/update/reset 均归一化 waypoint_sampling`
+  - changed=`POST /api/mission/start 支持 sampling_sequence + waypoint_sampling 覆盖当前配置`
+  - changed=`_publish_steps() 透传 waypoint_sampling`
+- changed=`src/usv_ros/launch/usv_bringup.launch`
+  - added=`hold_settle_time / stable_check_timeout / stable_speed_threshold / stable_yaw_rate_threshold / sampling_retry_count / sampling_on_fail launch args`
+  - added=`新参数下发到 mavlink_trigger_node`
+- changed=`docs/current/INTERFACE.md`
+  - updated=`launch 参数、waypoint_sampling 结构、/usv/mission_status 阶段语义`
+- changed=`docs/current/overview.md`
+  - updated=`阶段一第一轮闭环增强能力与运行约束`
+- verify=`python -m py_compile src/usv_ros/scripts/mavlink_trigger_node.py src/usv_ros/scripts/web_config_server.py -> rc=0`
+- verify=`diagnostics(src/usv_ros/scripts/mavlink_trigger_node.py, src/usv_ros/scripts/web_config_server.py, src/usv_ros/launch/usv_bringup.launch, docs/current/INTERFACE.md, docs/current/overview.md)=0`
+
+## remeber.exec.32
+label=stage1|fact=阶段一第一轮已在 ROS/Web 落地稳定等待 航点去重 失败策略 航点级配置|impact=自动航点采样闭环从原型升级为可调参数版|next=实船验证状态切换和阈值取值
+
+## remeber.exec.33
+label=launch|fact=usv_bringup.launch 已暴露 6 个阶段一新参数|impact=现场可无需改代码直接调节稳定窗口和失败策略|next=README/TESTING 如需可再补参数示例
+
+## remeber.docs.32
+label=interface_sync|fact=INTERFACE/overview/task 已同步阶段一新增接口与状态语义|impact=后续联调可直接以 docs/current 为准|next=如继续做 QGC 展示需补 mission_status 到 QGC 映射
+
+## remeber.summary.16
+label=summary|fact=当前自动采样链路已具备“到点-HOLD-稳定等待-采样-恢复AUTO/失败处理”的最小闭环|impact=可以进入现场阈值调参与状态观察阶段|next=继续做 README/TESTING 补充或 QGC/Web 可视化增强
+
+
+## 2026-04-15T01:00:00Z implementation.stage1_bugfix_and_stage2_waypoint_editor
+- phase_1=`阶段一自查修复`
+  - changed=`src/usv_ros/scripts/mavlink_trigger_node.py`
+    - fixed=`删除重复的 _state_cb 定义`
+    - fixed=`_handle_completion 加 state_lock CAS 保护防止重复执行`
+    - fixed=`run() 中 prev_mode 更新移到 if 外，采样期间模式变化不再被吞`
+- phase_2=`阶段二：航点采样配置 API`
+  - changed=`src/usv_ros/scripts/web_config_server.py`
+    - added=`GET/POST /api/waypoint-sampling`
+    - added=`GET/POST/DELETE /api/waypoint-sampling/<seq>`
+    - fixed=`_status_cb 不再覆盖 mission_status`
+- phase_3=`阶段二：前端航点采样编辑器`
+  - created=`src/usv_ros/frontend/src/components/waypoint-sampling-card.tsx`
+  - changed=`src/usv_ros/frontend/src/pages/Automation.tsx`
+  - changed=`src/usv_ros/frontend/src/pages/Monitor.tsx`
+- phase_4=`文档同步`
+  - changed=`docs/current/INTERFACE.md`
+- verify=`py_compile -> rc=0; diagnostics -> 0`
+
+## remeber.exec.34
+label=stage1_fix|fact=删除重复 _state_cb + completion 加锁 + prev_mode 修正|impact=消除竞态和模式吞没|next=实船验证
+
+## remeber.exec.35
+label=stage2|fact=新增 5 个 waypoint-sampling API + 前端编辑器|impact=航点级采样参数完整可编辑|next=阶段三 QGC/Web 同步
+
+## remeber.summary.17
+label=summary|fact=阶段一修复3缺陷 阶段二落地航点采样 CRUD+编辑器|impact=系统已具备航点级采样配置能力|next=继续完善或进入阶段三
+
+
+## 2026-04-15T02:00:00Z implementation.stage2_review_and_stage3_sync
+- phase_1=`阶段二自查`
+  - result=`无严重逻辑 Bug`
+  - note=`handleAction start 不携带 waypoint_sampling 为 UX 问题非逻辑 bug，在阶段三修复`
+- phase_2=`阶段三：任务配置导入导出 API`
+  - changed=`src/usv_ros/scripts/web_config_server.py`
+    - added=`GET /api/mission-config/export (JSON 文件下载)`
+    - added=`POST /api/mission-config/import (JSON 导入覆盖)`
+- phase_3=`阶段三：前端同步增强`
+  - changed=`src/usv_ros/frontend/src/pages/Automation.tsx`
+    - fixed=`handleAction('start') 启动前自动 fetch waypoint_sampling 并一并下发`
+    - added=`导出/导入按钮（调用 /api/mission-config/export|import）`
+- phase_4=`文档同步`
+  - changed=`docs/current/INTERFACE.md` added mission-config API
+  - changed=`docs/current/overview.md` 补阶段二三能力
+- verify=`py_compile -> rc=0; diagnostics -> 0`
+
+## remeber.exec.37
+label=stage3|fact=新增导入导出 API + 前端启动时自动同步 waypoint_sampling|impact=任务配置可跨设备迁移且启动时保证配置一致性|next=实船验证导入导出与启动流程
+
+## remeber.summary.18
+label=summary|fact=阶段一~三已全部落地：ROS 闭环/航点编辑器/配置同步导入导出|impact=系统可进入现场联调阶段|next=可选阶段四 QGC Plan 原生扩展

@@ -1,5 +1,5 @@
 # 接口速查
-Updated: 2026-04-13T13:34:06Z
+Updated: 2026-04-15T00:00:00Z
 
 ## 0. 总管理仓库入口
 - 根文档：`README.md`
@@ -32,7 +32,7 @@ Updated: 2026-04-13T13:34:06Z
 - 泵控：`pump_port` `pump_baudrate` `pump_timeout` `pid_mode` `pid_precision`
 - Web：`web_host` `web_port` `web_ui`
 - MAVROS：`mavros_timeout` `enable_mavros` `mavros_fcu_url` `mavros_gcs_url` `mavros_tgt_system` `mavros_tgt_component` `mavros_fcu_protocol` `mavros_respawn`
-- MAVLink：`auto_trigger_on_waypoint` `trigger_waypoints` `mavlink_source_system` `mavlink_source_component` `mavlink_router_url`
+- MAVLink：`auto_trigger_on_waypoint` `trigger_waypoints` `hold_settle_time` `stable_check_timeout` `stable_speed_threshold` `stable_yaw_rate_threshold` `sampling_retry_count` `sampling_on_fail` `mavlink_source_system` `mavlink_source_component` `mavlink_router_url`
 - 开关：`enable_pump` `enable_web` `enable_mavlink_trigger` `enable_mavlink_bridge`
 
 ## 3. ROS Topics
@@ -59,6 +59,25 @@ Updated: 2026-04-13T13:34:06Z
 - `/usv/mavlink_cmd_ack` `std_msgs/Float32MultiArray`
 - `/mavros/state` `mavros_msgs/State`
 - `/mavros/mission/reached` `mavros_msgs/WaypointReached`
+- `/mavros/local_position/velocity_local` `geometry_msgs/TwistStamped`
+- `/mavros/imu/data` `sensor_msgs/Imu`
+
+### 3.3 `/usv/mission_status` 语义
+- 发布源：`src/usv_ros/scripts/mavlink_trigger_node.py`
+- 当前阶段值：
+  - `IDLE`
+  - `NAVIGATING:<wp_seq>`
+  - `WAYPOINT_REACHED:<wp_seq>`
+  - `HOLDING:<wp_seq>`
+  - `WAITING_STABLE:<wp_seq>`
+  - `SAMPLING:<wp_seq>`
+  - `SAMPLING_DONE:<wp_seq>`
+  - `RESUMING_AUTO:<wp_seq>`
+  - `HOLD_NO_MISSION:<wp_seq>`
+  - `FAILED:<wp_seq>:<reason>`
+  - `PAUSED:<wp_seq>`
+  - `ABORTED:<wp_seq>`
+- 用途：供 Web/QGC 判断自动采样任务当前所处阶段，而不再仅依赖 `pump_status`
 
 ## 4. ROS Services
 - `/usv/pump_stop`
@@ -87,6 +106,13 @@ Updated: 2026-04-13T13:34:06Z
 - `POST /api/calibration/zero`
 - `POST /api/calibration/reset`
 - `POST /api/calibration/start`
+- `GET /api/waypoint-sampling`
+- `POST /api/waypoint-sampling`
+- `GET /api/waypoint-sampling/<seq>`
+- `POST /api/waypoint-sampling/<seq>`
+- `DELETE /api/waypoint-sampling/<seq>`
+- `GET /api/mission-config/export`
+- `POST /api/mission-config/import`
 - `POST /api/injection-pump/status`
 - `POST /api/injection-pump/on`
 - `POST /api/injection-pump/off`
@@ -100,6 +126,21 @@ Updated: 2026-04-13T13:34:06Z
 - `GET /api/diagnostics/history`
 - `GET /api/diagnostics/events`
 - `GET /api/diagnostics/export`
+
+
+### 5.1 任务配置结构
+- `GET /api/config` / `POST /api/config` 的任务配置包含：
+  - `sampling_sequence.loop_count`
+  - `sampling_sequence.steps[]`
+  - `waypoint_sampling.<seq>.enabled`
+  - `waypoint_sampling.<seq>.loop_count`
+  - `waypoint_sampling.<seq>.retry_count`
+  - `waypoint_sampling.<seq>.hold_before_sampling_s`
+  - `waypoint_sampling.<seq>.on_fail`
+- `POST /api/mission/start` 支持额外携带：
+  - `sampling_sequence`
+  - `waypoint_sampling`
+- 语义：启动任务时，Web 可用请求体覆盖当前保存配置，然后下发至 `mavlink_trigger_node.py` / `pump_control_node.py`
 
 ## 6. Socket.IO 事件
 ### 6.1 后端发出
@@ -140,7 +181,12 @@ Updated: 2026-04-13T13:34:06Z
 - 连接：`router_url`，默认 `tcp:127.0.0.1:5760`
 - 消息：`HEARTBEAT`、`NAMED_VALUE_FLOAT`
 - 频率：`HEARTBEAT 1Hz`，载荷遥测 `2Hz`
-- 字段：`USV_VOLT` `USV_ABS` `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` `USV_STAT` `USV_PKT`
+- 字段：`USV_VOLT` `USV_ABS` `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` `USV_STAT` `USV_PKT` `USV_STEP` `USV_STOT` `USV_SCNT` `USV_PERR` `USV_PMOD`
+  - `USV_STEP`：当前自动化步骤号（float，整数编码）
+  - `USV_STOT`：总步骤数（float，整数编码）
+  - `USV_SCNT`：已采集样本计数（float，整数编码）
+  - `USV_PERR`：PID 误差值（float）
+  - `USV_PMOD`：PID 模式（float，0=空闲, 1=运行中, 2=已完成, 3=错误）
 
 ### 7.3 飞控转发
 文件：`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`ardupilot-usv/Rover/sensors.cpp`
@@ -155,6 +201,11 @@ Updated: 2026-04-13T13:34:06Z
 - `pumpX/pumpY/pumpZ/pumpA` <- `PUMP_X/Y/Z/A`
 - `status` <- `USV_STAT`
 - `packetCount` <- `USV_PKT`
+- `stepCurrent` <- `USV_STEP`
+- `stepTotal` <- `USV_STOT`
+- `sampleCount` <- `USV_SCNT`
+- `pidError` <- `USV_PERR`
+- `pidMode` <- `USV_PMOD`
 - `linkActive`：5 秒超时后置 0
 
 ## 8. 运行目录
