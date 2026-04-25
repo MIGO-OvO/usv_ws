@@ -1,5 +1,5 @@
 # 检测装置主控固件说明
-Updated: 2026-04-25T15:46:29+08:00
+Updated: 2026-04-25T16:30:00+08:00
 
 ## 1. 代码位置
 - 固件目录：`DetFirmware/`
@@ -34,6 +34,8 @@ Updated: 2026-04-25T15:46:29+08:00
 - 新增固件身份握手，解决“串口可打开但不能确认是否为检测装置”的问题。
 - ROS `pump_control_node.py` 连接时必须通过 `HELLO?` 握手后才启动读取器和运行时配置。
 - Web `/api/hardware/test-pump-port` 从“仅测试可打开”升级为“打开 + 握手识别”。
+- Windows 上位机 `MotorControlApp_Pyside6` 串口连接时先握手，失败弹出错误并关闭串口。
+
 - 固件普通命令解析后返回 `CMD_OK` / `CMD_ERR:UNKNOWN`，便于上位机判断命令已被固件接收。
 - `TaskComms()` 空闲延迟由 `10ms` 改为 `1ms`，降低串口命令排队延迟。
 

@@ -1,5 +1,5 @@
 # 关键目录树
-Generated: 2026-04-25T15:46:29+08:00
+Generated: 2026-04-25T16:30:00+08:00
 
 ```text
 .
@@ -43,6 +43,31 @@ Generated: 2026-04-25T15:46:29+08:00
 │     ├─ i2c_mux.h
 │     ├─ ads122c04.h
 │     └─ protocol_packets.h
+├─ MotorControlApp_Pyside6/
+│  ├─ main.py
+│  ├─ requirements.txt
+│  ├─ start.bat
+│  └─ src/
+│     ├─ config/
+│     │  ├─ constants.py
+│     │  └─ settings.py
+│     ├─ core/
+│     │  ├─ serial_manager.py
+│     │  ├─ command_generator.py
+│     │  ├─ automation_engine.py
+│     │  ├─ pid_analyzer.py
+│     │  ├─ pid_optimizer.py
+│     │  └─ preset_manager.py
+│     ├─ hardware/
+│     │  ├─ serial_reader.py
+│     │  └─ daq_thread.py
+│     ├─ ui/
+│     │  ├─ main_window_complete.py
+│     │  ├─ mixins/
+│     │  ├─ dialogs/
+│     │  └─ widgets/
+│     └─ utils/
+
 ├─ src/
 │  └─ usv_ros/
 │     ├─ README.md

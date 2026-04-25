@@ -210,12 +210,14 @@ Updated: 2026-04-25T15:46:29+08:00
 
 
 ## 8. 检测装置主控串口协议
-文件：`DetFirmware/src/main.cpp`、`src/usv_ros/scripts/pump_control_node.py`、`src/usv_ros/scripts/web_config_server.py`
+文件：`DetFirmware/src/main.cpp`、`src/usv_ros/scripts/pump_control_node.py`、`src/usv_ros/scripts/web_config_server.py`、`MotorControlApp_Pyside6/src/ui/mixins/serial_mixin.py`、`MotorControlApp_Pyside6/src/core/serial_manager.py`
 - 串口参数：`115200 8N1`，文本命令终止符 `\r\n`。
 - 身份握手：`HELLO?\r\n` 或 `DET?\r\n` -> `DET_ID:USV_DETECTOR,FW=<version>,BAUD=115200`。
 - ROS 连接：`pump_control_node.connect()` 打开串口后先执行 `perform_detector_handshake()`，失败则关闭串口并发布错误。
 - Web 测试：`POST /api/hardware/test-pump-port` 执行同一握手，返回 `identity`。
 - 命令确认：普通 `J/R` 电机命令解析后返回 `CMD_OK`；无法识别返回 `CMD_ERR:UNKNOWN`。
+- Windows 上位机：`serial_mixin.open_serial()` 和 `serial_manager.connect_port()` 打开串口后执行 `_perform_handshake()`，失败则关闭串口并弹出错误。
+
 - 通信任务：`TaskComms()` 空闲延迟 `COMMS_TASK_DELAY_MS=1ms`，PID/校准周期 `20ms`。
 - 二进制上行：`0x55 0xAA` PID、`0x55 0xBB` 测试结果、`0x55 0xCC` 角度、`0x55 0xDD` 分光。
 

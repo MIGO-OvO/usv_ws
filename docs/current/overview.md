@@ -1,17 +1,19 @@
 # 项目概览
-Updated: 2026-04-25T15:46:29+08:00
+Updated: 2026-04-25T16:30:00+08:00
 
 ## 1. 范围
 - 地面端：`WQ-USV-QGroundControl/`
 - 船载端：`src/usv_ros/`
 - 飞控端：`ardupilot-usv/`
 - 检测装置主控固件：`DetFirmware/`
+- Windows 上位机：`MotorControlApp_Pyside6/`
 - 当前文档目录：`docs/current/`
 
 ## 2. 当前系统结构
 - QGC 自定义层发送 `COMMAND_LONG` 指令并显示载荷遥测。
 - ROS Noetic 运行泵控、分光采集、Web 服务、MAVLink 指令接收与载荷遥测发送。
 - `DetFirmware/` 为检测装置 ESP32 主控固件，负责四路步进泵、进样泵 PWM、MT6701 角度、ADS122C04 分光采集与串口协议。
+- `MotorControlApp_Pyside6/` 为 Windows 端 PySide6 上位机，提供电机手动/自动控制、PID 调参、分光采集、数据导出等 GUI 功能。
 - ArduRover 固件接收来自伴随计算机的 `NAMED_VALUE_FLOAT`，缓存后以 2Hz 周期性转发到 GCS（直转发已被 MAVLink_routing 阻断）。
 - `mavlink-routerd` 独占 `/dev/ttyTHS1`，为 MAVROS（UDP:14550）与载荷遥测桥（TCP:5760）提供物理隔离的 MAVLink 路由。
 
@@ -48,6 +50,8 @@ bridge(sysid=1/compid=191) -[2Hz×8字段]-> mavlink-routerd -[UART]-> 飞控
 - `pump_control_node.py` 提供四路步进泵、进样泵、自动化步骤执行、分光采集。
 - `DetFirmware/src/main.cpp` 支持 `HELLO?`/`DET?` 身份握手，返回 `DET_ID:USV_DETECTOR,...`；普通命令处理后返回 `CMD_OK`/`CMD_ERR:UNKNOWN`。
 - Web `/api/hardware/test-pump-port` 已从“串口可打开”升级为“串口打开 + 检测装置握手识别”。
+- `MotorControlApp_Pyside6` 串口连接（`serial_mixin.py` 和 `serial_manager.py`）已统一执行 `HELLO?` 握手，非检测装置不启动读取线程。
+
 - `mavlink_trigger_node.py` 已完成阶段一第一轮闭环增强：
   - 支持 `hold_settle_time` / `stable_check_timeout` / `stable_speed_threshold` / `stable_yaw_rate_threshold`
   - 支持 waypoint 级 `loop_count` / `retry_count` / `hold_before_sampling_s` / `on_fail`

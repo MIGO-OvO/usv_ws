@@ -1169,3 +1169,23 @@ label=docs_sync|fact=overview/INTERFACE/TREE/guide/plan 已记录 DetFirmware �
 
 ## remeber.summary.19
 label=summary|fact=本轮修复覆盖指令响应可观测性和串口身份识别|impact=联调时可通过 DET_ID 与 CMD_OK 快速定位错误串口/未接收/命令错误|next=安装 PlatformIO 后执行 pio run 与烧录测试
+
+## 2026-04-25T16:30:00+08:00 implementation.win_app_handshake_sync
+- changed=`MotorControlApp_Pyside6/src/config/constants.py`
+  - added=`DETECTOR_HANDSHAKE_CMD/DETECTOR_ID_PREFIX/HANDSHAKE_TIMEOUT/HANDSHAKE_PROBE_INTERVAL`
+- changed=`MotorControlApp_Pyside6/src/ui/mixins/serial_mixin.py`
+  - added=`_perform_handshake() 静态方法`
+  - changed=`open_serial(): reset buffer -> handshake -> SerialReader`
+- changed=`MotorControlApp_Pyside6/src/core/serial_manager.py`
+  - added=`_perform_handshake() 静态方法`
+  - changed=`connect_port(): reset buffer -> handshake -> SerialReader`
+- changed=`docs/current/overview.md, INTERFACE.md, TREE.md, det_firmware_guide.md, task.md`
+- verify=`python -m py_compile constants.py serial_manager.py serial_mixin.py -> rc=0`
+- verify=`diagnostics -> 0`
+
+## remeber.exec.39
+label=win_handshake|fact=Windows 上位机两条串口路径均已加入 HELLO 握手|impact=打开非检测装置串口时弹出明确错误|next=实机联调验证
+
+## remeber.summary.20
+label=summary|fact=检测装置握手协议已覆盖四端：固件/ROS/Web/Windows 上位机|impact=所有上位机端点打开串口前均可识别设备身份|next=烧录固件后逐端测试
+
