@@ -1131,3 +1131,41 @@ label=stage3|fact=新增导入导出 API + 前端启动时自动同步 waypoint_
 
 ## remeber.summary.18
 label=summary|fact=阶段一~三已全部落地：ROS 闭环/航点编辑器/配置同步导入导出|impact=系统可进入现场联调阶段|next=可选阶段四 QGC Plan 原生扩展
+
+
+## 2026-04-25T15:46:29+08:00 implementation.det_firmware_handshake_latency
+- codebase-retrieval.hit1=`DetFirmware/src/main.cpp setup/TaskComms/parseCommand`
+- codebase-retrieval.hit2=`DetFirmware/src/protocol_packets.h packet headers`
+- codebase-retrieval.hit3=`docs/current/TREE.md docs/current/task.md overview.md INTERFACE.md`
+- changed=`DetFirmware/src/main.cpp`
+  - added=`DET_FIRMWARE_ID/DET_FIRMWARE_VERSION/COMMS_TASK_DELAY_MS`
+  - added=`HELLO?/DET? -> sendIdentity() -> DET_ID:USV_DETECTOR,FW=2026.04.25,BAUD=115200`
+  - changed=`TaskComms vTaskDelay 10ms -> 1ms`
+  - added=`parseCommand() handled flag + CMD_OK/CMD_ERR:UNKNOWN`
+- changed=`src/usv_ros/scripts/pump_control_node.py`
+  - added=`perform_detector_handshake()`
+  - changed=`connect(): open serial -> reset buffers -> HELLO handshake -> start PumpSerialReader`
+- changed=`src/usv_ros/scripts/web_config_server.py`
+  - changed=`POST /api/hardware/test-pump-port: open serial + HELLO handshake + identity response`
+- changed=`docs/current/overview.md, INTERFACE.md, plan.md, TREE.md, det_firmware_guide.md`
+- verify=`python -m py_compile src/usv_ros/scripts/pump_control_node.py src/usv_ros/scripts/web_config_server.py -> rc=0`
+- verify=`diagnostics(DetFirmware/src/main.cpp, pump_control_node.py, web_config_server.py, docs/current/*.md) -> 0`
+- blocker=`pio run -> rc=1; pio command not found on current Windows host`
+- pending=`PlatformIO build/flash + real serial HELLO handshake + Web test-pump-port + ROS reconnect`
+- commit.ros=`8d2d32e6 Fix: add detector serial handshake`
+
+
+## remeber.intake.32
+label=scope|fact=DetFirmware 是 ESP32 PlatformIO Arduino 固件，入口为 src/main.cpp|impact=修复需同时覆盖固件、ROS 串口节点、Web 串口测试|next=实机烧录后联调
+
+## remeber.audit.32
+label=latency|fact=固件原 TaskComms 空闲轮询 10ms 且普通 J/R 命令无确认|impact=命令是否已到达固件不可观测，容易被误判为延迟数秒|next=用 CMD_OK 和串口日志确认接收时刻
+
+## remeber.exec.38
+label=handshake|fact=固件/ROS/Web 已统一 HELLO? -> DET_ID:USV_DETECTOR 协议|impact=用户可区分“串口可打开”和“确认为检测装置”|next=Web 设置页选择串口后执行测试
+
+## remeber.docs.33
+label=docs_sync|fact=overview/INTERFACE/TREE/guide/plan 已记录 DetFirmware 架构与握手协议|impact=后续开发可按 docs/current 定位固件协议|next=若实机调整版本号或超时需同步文档
+
+## remeber.summary.19
+label=summary|fact=本轮修复覆盖指令响应可观测性和串口身份识别|impact=联调时可通过 DET_ID 与 CMD_OK 快速定位错误串口/未接收/命令错误|next=安装 PlatformIO 后执行 pio run 与烧录测试

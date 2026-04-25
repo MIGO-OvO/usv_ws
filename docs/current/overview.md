@@ -1,15 +1,17 @@
 # 项目概览
-Updated: 2026-04-15T00:00:00Z
+Updated: 2026-04-25T15:46:29+08:00
 
 ## 1. 范围
 - 地面端：`WQ-USV-QGroundControl/`
 - 船载端：`src/usv_ros/`
 - 飞控端：`ardupilot-usv/`
+- 检测装置主控固件：`DetFirmware/`
 - 当前文档目录：`docs/current/`
 
 ## 2. 当前系统结构
 - QGC 自定义层发送 `COMMAND_LONG` 指令并显示载荷遥测。
 - ROS Noetic 运行泵控、分光采集、Web 服务、MAVLink 指令接收与载荷遥测发送。
+- `DetFirmware/` 为检测装置 ESP32 主控固件，负责四路步进泵、进样泵 PWM、MT6701 角度、ADS122C04 分光采集与串口协议。
 - ArduRover 固件接收来自伴随计算机的 `NAMED_VALUE_FLOAT`，缓存后以 2Hz 周期性转发到 GCS（直转发已被 MAVLink_routing 阻断）。
 - `mavlink-routerd` 独占 `/dev/ttyTHS1`，为 MAVROS（UDP:14550）与载荷遥测桥（TCP:5760）提供物理隔离的 MAVLink 路由。
 
@@ -44,6 +46,8 @@ bridge(sysid=1/compid=191) -[2Hz×8字段]-> mavlink-routerd -[UART]-> 飞控
 - ArduRover 固件 `GCS_MAVLink_Rover.cpp` 缓存 `NAMED_VALUE_FLOAT`；`sensors.cpp` 以 2Hz 受控重发；`MAVLink_routing.cpp` 阻断直转发。
 - `web_config_server.py` 提供硬件配置 API、任务控制 API、进样泵 API、Socket.IO 状态推送。
 - `pump_control_node.py` 提供四路步进泵、进样泵、自动化步骤执行、分光采集。
+- `DetFirmware/src/main.cpp` 支持 `HELLO?`/`DET?` 身份握手，返回 `DET_ID:USV_DETECTOR,...`；普通命令处理后返回 `CMD_OK`/`CMD_ERR:UNKNOWN`。
+- Web `/api/hardware/test-pump-port` 已从“串口可打开”升级为“串口打开 + 检测装置握手识别”。
 - `mavlink_trigger_node.py` 已完成阶段一第一轮闭环增强：
   - 支持 `hold_settle_time` / `stable_check_timeout` / `stable_speed_threshold` / `stable_yaw_rate_threshold`
   - 支持 waypoint 级 `loop_count` / `retry_count` / `hold_before_sampling_s` / `on_fail`
@@ -63,6 +67,7 @@ bridge(sysid=1/compid=191) -[2Hz×8字段]-> mavlink-routerd -[UART]-> 飞控
 - 航点级采样配置当前由 `sampling_config.json` / Web `waypoint_sampling` 驱动，尚未进入 QGC Plan 原生任务模型。
 - 根仓库只保留一个 Windows `.bat` 引导脚本；不再保留 `.sh`/`.ps1` bootstrap 入口。
 - `.bat` 已写死 3 个外部源码仓库 URL；ROS/QGC/ArduPilot 仍按各自仓库原生构建入口执行。
+- `DetFirmware` 构建依赖 PlatformIO；当前 Windows 环境未安装 `pio`，只能完成源码逻辑与 Python 语法验证，实机烧录需用户执行。
 
 ## 6. 稳定版本标签
 | 仓库 | 标签 | commit | 说明 |
@@ -84,6 +89,7 @@ cd ~/usv_ws/WQ-USV-QGroundControl && git checkout v0.2.0-stable
 - 测试入口：`src/usv_ros/TESTING.md`
 - 接口速查：`docs/current/INTERFACE.md`
 - 固件说明：`docs/current/ardupilot_firmware_guide.md`
+- 检测装置固件说明：`docs/current/det_firmware_guide.md`
 - 技术计划：`docs/current/plan.md`
 - 任务记录：`docs/current/task.md`
 - 后续规划：`docs/current/roadmap.md`

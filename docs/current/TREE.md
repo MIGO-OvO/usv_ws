@@ -1,5 +1,5 @@
 # 关键目录树
-Generated: 2026-04-13T22:06:23+08:00
+Generated: 2026-04-25T15:46:29+08:00
 
 ```text
 .
@@ -33,6 +33,16 @@ Generated: 2026-04-13T22:06:23+08:00
 │  ├─ Rover/
 │  ├─ Tools/
 │  └─ libraries/
+├─ DetFirmware/
+│  ├─ platformio.ini
+│  ├─ include/
+│  ├─ lib/
+│  ├─ test/
+│  └─ src/
+│     ├─ main.cpp
+│     ├─ i2c_mux.h
+│     ├─ ads122c04.h
+│     └─ protocol_packets.h
 ├─ src/
 │  └─ usv_ros/
 │     ├─ README.md
@@ -71,11 +81,11 @@ Generated: 2026-04-13T22:06:23+08:00
 │     ├─ overview.md
 │     ├─ INTERFACE.md
 │     ├─ ardupilot_firmware_guide.md
+│     ├─ det_firmware_guide.md
 │     ├─ injection_pump_reference.md
 │     ├─ plan.md
 │     ├─ task.md
 │     ├─ ppt_progress_report_20260331_20260413.md
-
 │     └─ TREE.md
 ├─ build/
 ├─ devel/
