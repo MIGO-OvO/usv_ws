@@ -3,6 +3,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
+#include <esp_task_wdt.h>
 
 // 新增模块头文�?
 #include "i2c_mux.h"
@@ -40,6 +41,8 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define COMMS_TASK_DELAY_MS 1
 #define SENSOR_TASK_DELAY_MS 2
 #define MAX_COMMAND_LENGTH 160
+#define TASK_WDT_TIMEOUT_SEC 5
+
 #define MAX_OPEN_LOOP_RPM 20.0f
 #define MAX_COMMAND_DEGREES 3600.0f
 
@@ -286,6 +289,10 @@ void stopPIDTest();
 // 角度流函数声�?
 void sendAnglePacket();
 void sendIdentity();
+void initTaskWatchdog();
+void registerCurrentTaskWatchdog();
+void feedTaskWatchdog();
+
 
 // --- 进样泵控制函�?---
 void setPumpSpeed(uint8_t speedPercent) {
@@ -305,6 +312,25 @@ void setPumpEnabled(bool enabled) {
         ledcWrite(PUMP_PWM_CHANNEL, 0);
     }
 }
+
+void initTaskWatchdog() {
+    esp_err_t result = esp_task_wdt_init(TASK_WDT_TIMEOUT_SEC, true);
+    if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
+        Serial.printf("WDT_ERR:INIT=%d\n", (int)result);
+    }
+}
+
+void registerCurrentTaskWatchdog() {
+    esp_err_t result = esp_task_wdt_add(NULL);
+    if (result != ESP_OK && result != ESP_ERR_INVALID_STATE) {
+        Serial.printf("WDT_ERR:ADD=%d\n", (int)result);
+    }
+}
+
+void feedTaskWatchdog() {
+    esp_task_wdt_reset();
+}
+
 
 // --- Setup ---
 void setup() {
@@ -338,6 +364,8 @@ void setup() {
     Serial.printf("PID Params: Kp=%.4f, Ki=%.5f, Kd=%.4f\n", g_pidKp, g_pidKi, g_pidKd);
     Serial.println("Injection pump initialized on GPIO2.");
     sendIdentity();
+    initTaskWatchdog();
+    registerCurrentTaskWatchdog();
 
     xTaskCreatePinnedToCore(TaskComms, "Comms", 8192, NULL, 2, NULL, 0);
     xTaskCreatePinnedToCore(TaskSensors, "Sensors", 4096, NULL, 1, NULL, 0);
@@ -351,12 +379,14 @@ void loop() {
         }
         xSemaphoreGive(motorMutex);
     }
+    feedTaskWatchdog();
     delayMicroseconds(5);
 }
 
 
 // --- Task Comms (Core 0) ---
 void TaskComms(void *pvParameters) {
+    registerCurrentTaskWatchdog();
     String inputBuffer = "";
     inputBuffer.reserve(128);
     bool commandOverflow = false;
@@ -680,6 +710,7 @@ void TaskComms(void *pvParameters) {
             }
         }
 
+        feedTaskWatchdog();
         vTaskDelay(COMMS_TASK_DELAY_MS / portTICK_PERIOD_MS);
     }
 }
@@ -688,6 +719,7 @@ void TaskComms(void *pvParameters) {
 // 在 Core 0 以低优先级运行，持续刷新 g_cachedAngles[]。
 // 与 TaskComms 通过 i2cMutex 共享 I2C 总线，互不阻塞串口命令。
 void TaskSensors(void *pvParameters) {
+    registerCurrentTaskWatchdog();
     while (true) {
         if (xSemaphoreTake(i2cMutex, 10 / portTICK_PERIOD_MS) == pdTRUE) {
             for (int i = 0; i < 4; i++) {
@@ -702,6 +734,7 @@ void TaskSensors(void *pvParameters) {
             g_angleTimestamp = millis();
             xSemaphoreGive(i2cMutex);
         }
+        feedTaskWatchdog();
         vTaskDelay(SENSOR_TASK_DELAY_MS / portTICK_PERIOD_MS);
     }
 }
