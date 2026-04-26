@@ -25,8 +25,9 @@ Updated: 2026-04-26T19:40:51+08:00
 ### 2.1 启动节点
 - `pump_control_node`
 - `web_config_server`
-- `mavlink_trigger_node`
 - `usv_mavlink_bridge`（实际脚本：`usv_mavlink_router_bridge.py`）
+- `mavlink_trigger_node`
+- 顺序：`usv_mavlink_bridge` 在 `mavlink_trigger_node` 前声明；核心依赖仍以 topic 重连与 bridge `autoreconnect=True` 兜底。
 
 ### 2.2 Launch 参数
 - 泵控：`pump_port` `pump_baudrate` `pump_timeout` `pid_mode` `pid_precision` `spectro_sample_wait_timeout`
