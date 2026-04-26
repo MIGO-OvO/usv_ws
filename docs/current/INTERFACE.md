@@ -1,5 +1,5 @@
 # 接口速查
-Updated: 2026-04-25T15:46:29+08:00
+Updated: 2026-04-26T19:40:51+08:00
 
 ## 0. 总管理仓库入口
 - 根文档：`README.md`
@@ -29,7 +29,7 @@ Updated: 2026-04-25T15:46:29+08:00
 - `usv_mavlink_bridge`（实际脚本：`usv_mavlink_router_bridge.py`）
 
 ### 2.2 Launch 参数
-- 泵控：`pump_port` `pump_baudrate` `pump_timeout` `pid_mode` `pid_precision`
+- 泵控：`pump_port` `pump_baudrate` `pump_timeout` `pid_mode` `pid_precision` `spectro_sample_wait_timeout`
 - Web：`web_host` `web_port` `web_ui`
 - MAVROS：`mavros_timeout` `enable_mavros` `mavros_fcu_url` `mavros_gcs_url` `mavros_tgt_system` `mavros_tgt_component` `mavros_fcu_protocol` `mavros_respawn`
 - MAVLink：`auto_trigger_on_waypoint` `trigger_waypoints` `hold_settle_time` `stable_check_timeout` `stable_speed_threshold` `stable_yaw_rate_threshold` `sampling_retry_count` `sampling_on_fail` `mavlink_source_system` `mavlink_source_component` `mavlink_router_url`
@@ -44,6 +44,8 @@ Updated: 2026-04-25T15:46:29+08:00
 - `/usv/injection_pump_status` `std_msgs/String`
 - `/usv/spectrometer_voltage` `std_msgs/String`
 - `/usv/spectrometer_status` `std_msgs/String`
+- `/usv/spectrometer_raw` `std_msgs/String`
+- `/usv/spectrometer_absorbance` `std_msgs/String`
 - `/usv/mission_status` `std_msgs/String`
 - `/usv/detection_result` `std_msgs/String`
 - `/usv/trigger_status` `std_msgs/String`
@@ -87,6 +89,9 @@ Updated: 2026-04-25T15:46:29+08:00
 - `/usv/automation_resume`
 - `/usv/injection_pump_on`
 - `/usv/injection_pump_off`
+- `/usv/spectrometer_start`
+- `/usv/spectrometer_stop`
+- `/usv/i2c_map_apply`
 - `/usv/injection_pump_get_status`
 - `/usv/pump_reconnect`
 - `/usv/trigger_sampling`
@@ -142,6 +147,12 @@ Updated: 2026-04-25T15:46:29+08:00
   - `waypoint_sampling`
 - 语义：启动任务时，Web 可用请求体覆盖当前保存配置，然后下发至 `mavlink_trigger_node.py` / `pump_control_node.py`
 
+### 5.2 自动化步骤等待语义
+- 文件：`src/usv_ros/scripts/lib/automation_engine.py`、`src/usv_ros/scripts/pump_control_node.py`
+- 顺序：`_send_step_command()` -> `_wait_for_step_execution()` -> `on_step_complete` -> `interval`
+- `pump_control_node.py::_wait_for_automation_step()`：非 PID 电机估算等待；进样泵 `pump.duration_ms` 定时关闭；ADS `spectro_state=acquiring` 时等待 1 条新的 `valid=true` 分光包。
+- 超时参数：`~spectro_sample_wait_timeout`，默认 `2.0s`。
+
 ## 6. Socket.IO 事件
 ### 6.1 后端发出
 - `status`
@@ -190,7 +201,7 @@ Updated: 2026-04-25T15:46:29+08:00
 
 ### 7.3 飞控转发
 文件：`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`ardupilot-usv/Rover/sensors.cpp`
-- 接收缓存：`MAVLINK_MSG_ID_NAMED_VALUE_FLOAT`
+- 接收缓存：`MAVLINK_MSG_ID_NAMED_VALUE_FLOAT`，缓存上述 13 个字段到 `rover.usv_payload`
 - 转发函数：`Rover::usv_telemetry_send()`
 - 调度：`SCHED_TASK(usv_telemetry_send, 2, 200, 132)`
 
