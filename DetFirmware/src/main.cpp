@@ -293,6 +293,7 @@ void initTaskWatchdog();
 void registerCurrentTaskWatchdog();
 void feedTaskWatchdog();
 
+float getCachedAngle(int motorIndex);
 
 // --- 进样泵控制函�?---
 void setPumpSpeed(uint8_t speedPercent) {
