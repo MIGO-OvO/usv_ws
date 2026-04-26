@@ -1,5 +1,5 @@
 # 项目概览
-Updated: 2026-04-26T19:40:51+08:00
+Updated: 2026-04-26T19:55:14+08:00
 
 ## 1. 范围
 - 地面端：`WQ-USV-QGroundControl/`
@@ -73,7 +73,7 @@ bridge(sysid=1/compid=191) -[2Hz×13字段]-> mavlink-routerd -[UART]-> 飞控
 - 航点级采样配置当前由 `sampling_config.json` / Web `waypoint_sampling` 驱动，尚未进入 QGC Plan 原生任务模型。
 - 根仓库只保留一个 Windows `.bat` 引导脚本；不再保留 `.sh`/`.ps1` bootstrap 入口。
 - `.bat` 已写死 3 个外部源码仓库 URL；ROS/QGC/ArduPilot 仍按各自仓库原生构建入口执行。
-- `DetFirmware` 构建依赖 PlatformIO；当前 Windows 环境未安装 `pio`，只能完成源码逻辑与 Python 语法验证，实机烧录需用户执行。
+- `DetFirmware` 构建依赖 PlatformIO；本轮 `pio run` 已通过，实机烧录与硬件看门狗复位行为需用户现场验证。
 
 ## 6. 稳定版本标签
 | 仓库 | 标签 | commit | 说明 |

@@ -1,5 +1,5 @@
 # 检测装置主控固件说明
-Updated: 2026-04-25T16:30:00+08:00
+Updated: 2026-04-26T19:55:14+08:00
 
 ## 1. 代码位置
 - 固件目录：`DetFirmware/`
@@ -29,6 +29,7 @@ Updated: 2026-04-25T16:30:00+08:00
 - `TaskComms()`：Core 0，读取串口、解析命令、周期执行 PID/校准、发送角度/分光包。
 - 通信任务空闲延迟：`COMMS_TASK_DELAY_MS=1`。
 - PID/校准周期：`CAL_INTERVAL=20ms`。
+- 任务看门狗：`TASK_WDT_TIMEOUT_SEC=5`；`loop()`、`TaskComms()`、`TaskSensors()` 已注册并周期喂狗。
 
 ## 5. 本轮修复
 - 新增固件身份握手，解决“串口可打开但不能确认是否为检测装置”的问题。
@@ -38,9 +39,12 @@ Updated: 2026-04-25T16:30:00+08:00
 
 - 固件普通命令解析后返回 `CMD_OK` / `CMD_ERR:UNKNOWN`，便于上位机判断命令已被固件接收。
 - `TaskComms()` 空闲延迟由 `10ms` 改为 `1ms`，降低串口命令排队延迟。
+- 串口输入长度限制：`MAX_COMMAND_LENGTH=160`，超长命令返回 `CMD_ERR:TOO_LONG` 并丢弃至换行。
+- 电机开环速度/角度已钳位：`MAX_OPEN_LOOP_RPM=20.0`、`MAX_COMMAND_DEGREES=3600.0`。
+- ESP32 任务看门狗已启用：`loop()`、`TaskComms()`、`TaskSensors()` 均注册。
 
 ## 6. 验证命令
 ```bash
 python -m py_compile src/usv_ros/scripts/pump_control_node.py src/usv_ros/scripts/web_config_server.py
-# PlatformIO 本机未安装：pio run 需在安装 PlatformIO 后执行
+cd DetFirmware && pio run
 ```
