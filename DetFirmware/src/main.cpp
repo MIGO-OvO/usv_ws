@@ -39,6 +39,9 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define DET_FIRMWARE_VERSION "2026.04.25"
 #define COMMS_TASK_DELAY_MS 1
 #define SENSOR_TASK_DELAY_MS 2
+#define MAX_COMMAND_LENGTH 160
+#define MAX_OPEN_LOOP_RPM 20.0f
+#define MAX_COMMAND_DEGREES 3600.0f
 
 // ============== 传感器缓存 ==============
 volatile float g_cachedAngles[4] = {0, 0, 0, 0};
@@ -356,6 +359,7 @@ void loop() {
 void TaskComms(void *pvParameters) {
     String inputBuffer = "";
     inputBuffer.reserve(128);
+    bool commandOverflow = false;
 
     unsigned long lastCalTime = 0;
 
@@ -367,7 +371,9 @@ void TaskComms(void *pvParameters) {
             char c = Serial.read();
             if(c == '\n') {
                 inputBuffer.trim();
-                if(inputBuffer.length() > 0) {
+                if(commandOverflow) {
+                    commandOverflow = false;
+                } else if(inputBuffer.length() > 0) {
                     if (inputBuffer == "DET?" || inputBuffer == "HELLO?") {
                         sendIdentity();
                     }
@@ -557,8 +563,14 @@ void TaskComms(void *pvParameters) {
                     }
                 }
                 inputBuffer = "";
-            } else {
-                inputBuffer += c;
+            } else if(c != '\r') {
+                if(inputBuffer.length() >= MAX_COMMAND_LENGTH) {
+                    inputBuffer = "";
+                    commandOverflow = true;
+                    Serial.println("CMD_ERR:TOO_LONG");
+                } else {
+                    inputBuffer += c;
+                }
             }
         }
 
@@ -797,6 +809,7 @@ void parsePIDTest(String cmd) {
 
     // 角度必须为正（方向由 dir 决定�?
     if (targetAngle < 0) targetAngle = fabs(targetAngle);
+    targetAngle = constrain(targetAngle, 0.0f, MAX_COMMAND_DEGREES);
 
     initPIDTest(motorIndex, targetAngle, direction, runs);
 }
@@ -1321,6 +1334,7 @@ void parseCommand(String cmd) {
             if(rIndex > vIndex && rIndex < endIndex) endIndex = rIndex;
             cmdRpm = cmd.substring(vIndex+1, endIndex).toFloat();
             if (cmdRpm <= 0) cmdRpm = 5.0f;
+            cmdRpm = constrain(cmdRpm, 0.0f, MAX_OPEN_LOOP_RPM);
         }
 
         // ============== R 指令：相对增量闭�?PID ==============
@@ -1353,6 +1367,7 @@ void parseCommand(String cmd) {
 
             // delta 必须 >= 0，方向由 F/B 决定
             if (delta < 0) delta = fabs(delta);
+            delta = constrain(delta, 0.0f, MAX_COMMAND_DEGREES);
 
             // 从缓存读取当前角度
             float rawAngle = getCachedAngle(motorIndex);
@@ -1437,6 +1452,7 @@ void parseCommand(String cmd) {
             } else {
                 m->isContinuous = false;
                 float degrees = jVal.toFloat();
+                degrees = constrain(fabs(degrees), 0.0f, MAX_COMMAND_DEGREES);
                 m->targetSteps = abs(degrees * STEP_PER_DEGREE);
                 m->stepsRemaining = m->targetSteps;
                 m->executedSteps = 0;
