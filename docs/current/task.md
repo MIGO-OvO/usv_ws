@@ -1189,3 +1189,29 @@ label=win_handshake|fact=Windows 上位机两条串口路径均已加入 HELLO �
 ## remeber.summary.20
 label=summary|fact=检测装置握手协议已覆盖四端：固件/ROS/Web/Windows 上位机|impact=所有上位机端点打开串口前均可识别设备身份|next=烧录固件后逐端测试
 
+
+
+## 2026-04-27T10:50:14+08:00 implementation.no_reset_handshake
+- changed=`MotorControlApp_Pyside6/src/ui/mixins/serial_mixin.py`
+  - changed=`open_serial(): Serial() -> set dtr/rts False -> open()`
+  - changed=`_perform_handshake(): remove DTR reset pulse; HELLO?/DET? alternating probes`
+- changed=`MotorControlApp_Pyside6/src/core/serial_manager.py`
+  - changed=`connect_port(): Serial() -> set dtr/rts False -> open()`
+  - changed=`_perform_handshake(): release DTR/RTS only; HELLO?/DET? alternating probes`
+- changed=`src/usv_ros/scripts/pump_control_node.py`
+  - changed=`connect(): Serial() -> set dtr/rts False -> open()`
+  - changed=`perform_detector_handshake(): no reset wait; release DTR/RTS; HELLO?/DET? alternating probes`
+- changed=`src/usv_ros/scripts/web_config_server.py`
+  - changed=`test_pump_port(): no-reset serial open; HELLO?/DET? alternating probes`
+- changed=`docs/current/overview.md, docs/current/INTERFACE.md, docs/current/task.md`
+- remember.intake.1=`scope|fact=Windows+ROS handshake only|impact=no DetFirmware change|next=py_compile`
+- remember.intake.2=`interface|fact=DetFirmware L408-L410 accepts DET?/HELLO?|impact=alternate probes valid|next=serial real test`
+- remember.intake.3=`risk|fact=USB driver may still pulse on open|impact=pre-open dtr/rts reduces active reset only|next=hardware verify`
+- remember.exec.1=`windows|fact=DTR/RTS forced False before open and during handshake|impact=no explicit reset pulse|next=COM test`
+- remember.exec.2=`ros|fact=pump_control_node/web_config_server same no-reset pattern|impact=Jetson path aligned|next=ROS pull test`
+- remember.exec.3=`compat|fact=HELLO?/DET? alternating|impact=old firmware DET? path retained|next=firmware version check`
+- remember.summary.1=`summary|fact=no-reset handshake implemented in Windows and ROS endpoints|impact=running detector can be identified without reboot dependency|next=实机验证`
+- remember.summary.2=`summary|fact=firmware protocol unchanged|impact=no下位机烧录 required for this change|next=confirm flashed firmware supports DET?/HELLO?`
+- remember.summary.3=`summary|fact=docs interface updated|impact=handshake behavior documented|next=commit per repo`
+- remember.summary.4=`summary|fact=existing Windows constants.py uncommitted before task|impact=commit will include required handshake constants|next=git status isolate`
+- remember.summary.5=`summary|fact=lowerDevice deletions pre-existing in Windows repo|impact=not staged|next=avoid add -A`

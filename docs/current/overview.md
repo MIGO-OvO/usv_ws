@@ -50,7 +50,7 @@ bridge(sysid=1/compid=191) -[2Hz×13字段]-> mavlink-routerd -[UART]-> 飞控
 - `pump_control_node.py` 提供四路步进泵、进样泵、自动化步骤执行、分光采集。
 - `DetFirmware/src/main.cpp` 支持 `HELLO?`/`DET?` 身份握手，返回 `DET_ID:USV_DETECTOR,...`；普通命令处理后返回 `CMD_OK`/`CMD_ERR:UNKNOWN`。
 - Web `/api/hardware/test-pump-port` 已从“串口可打开”升级为“串口打开 + 检测装置握手识别”。
-- `MotorControlApp_Pyside6` 串口连接（`serial_mixin.py` 和 `serial_manager.py`）已统一执行 `HELLO?` 握手，非检测装置不启动读取线程。
+- `MotorControlApp_Pyside6` 串口连接（`serial_mixin.py` 和 `serial_manager.py`）已执行不主动复位的 `HELLO?`/`DET?` 握手，非检测装置不启动读取线程。
 
 - `mavlink_trigger_node.py` 已完成阶段一第一轮闭环增强：
   - 支持 `hold_settle_time` / `stable_check_timeout` / `stable_speed_threshold` / `stable_yaw_rate_threshold`

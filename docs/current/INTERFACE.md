@@ -224,7 +224,7 @@ Updated: 2026-04-26T19:40:51+08:00
 ## 8. 检测装置主控串口协议
 文件：`DetFirmware/src/main.cpp`、`src/usv_ros/scripts/pump_control_node.py`、`src/usv_ros/scripts/web_config_server.py`、`MotorControlApp_Pyside6/src/ui/mixins/serial_mixin.py`、`MotorControlApp_Pyside6/src/core/serial_manager.py`
 - 串口参数：`115200 8N1`，文本命令终止符 `\r\n`。
-- 身份握手：`HELLO?\r\n` 或 `DET?\r\n` -> `DET_ID:USV_DETECTOR,FW=<version>,BAUD=115200`。
+- 身份握手：`HELLO?\r\n` 或 `DET?\r\n` -> `DET_ID:USV_DETECTOR,FW=<version>,BAUD=115200`；上位机/ROS 端打开串口时预置并释放 `DTR=False/RTS=False`，握手阶段不主动复位下位机。
 - ROS 连接：`pump_control_node.connect()` 打开串口后先执行 `perform_detector_handshake()`，失败则关闭串口并发布错误。
 - Web 测试：`POST /api/hardware/test-pump-port` 执行同一握手，返回 `identity`。
 - 命令确认：普通 `J/R` 电机命令解析后返回 `CMD_OK`；无法识别返回 `CMD_ERR:UNKNOWN`。
