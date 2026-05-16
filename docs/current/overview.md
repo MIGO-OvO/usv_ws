@@ -40,7 +40,7 @@ bridge(sysid=1/compid=191) -[2Hz×13字段]-> mavlink-routerd -[UART]-> 飞控
 - `mavlink_trigger_node.py` 处理 `31010~31014`，并回传 `COMMAND_ACK`。
 - `mavlink_trigger_node.py` 将 `31014` 转换为 `CALXYZA\r\n` 并发布到 `/usv/pump_command`。
 - `usv_mavlink_router_bridge.py` 通过 `pymavlink` 向 `mavlink-routerd` 发送 13 个 `NAMED_VALUE_FLOAT` 字段：`USV_VOLT`、`USV_ABS`、`PUMP_X/Y/Z/A`、`USV_STAT`、`USV_PKT`、`USV_STEP`、`USV_STOT`、`USV_SCNT`、`USV_PERR`、`USV_PMOD`（线程安全队列模式）。
-- `start_usv_all.sh`、`stop_usv_all.sh`、`status_usv_all.sh`（含 ROS 节点级检查 + MAVROS 连通检查 + bridge 诊断摘要）。
+- `start_usv_all.sh`、`stop_usv_all.sh`、`status_usv_all.sh`（含热点、外网默认路由、ROS 节点级检查 + MAVROS 连通检查 + bridge 诊断摘要）。
 - `bootstrap_workspace.bat` 为 Windows 提供唯一的外部仓库拉取入口，固定拉取 `ardupilot-usv`、`WQ-USV-QGroundControl`、`src/usv_ros`。
 - 根 `.gitignore` 忽略三方源码目录与本地构建产物，保证总管理仓库只提交文档与入口文件。
 - 根 `README.md` 汇总 clone、bootstrap、三端构建入口与 Git 管理策略。

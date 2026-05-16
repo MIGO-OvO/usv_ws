@@ -16,7 +16,7 @@ Updated: 2026-04-26T19:40:51+08:00
 - `start_usv_all.sh`：后台启动 `roscore`、`mavlink-routerd`、`roslaunch usv_ros usv_bringup.launch`。
 - `start_usv_system.sh`：前台启动 `roslaunch`，启动前确保 `roscore` 与 `mavlink-routerd` 已就绪。
 - `stop_usv_all.sh`：停止 `usv_system`、`mavlink-routerd`、`roscore`。
-- `status_usv_all.sh`：输出 `roscore`、`mavlink_router`、`usv_system` 状态与日志路径。
+- `status_usv_all.sh`：输出 `roscore`、`mavlink_router`、`usv_system`、热点、外网默认路由与日志路径。
 - `restart_usv_all.sh`：未包含单独逻辑说明；功能为 stop -> start。
 
 ## 2. Launch 入口
