@@ -18,6 +18,17 @@ Updated: 2026-04-26T19:40:51+08:00
 - `stop_usv_all.sh`：停止 `usv_system`、`mavlink-routerd`、`roscore`。
 - `status_usv_all.sh`：输出 `roscore`、`mavlink_router`、`usv_system` 状态与日志路径。
 - `restart_usv_all.sh`：未包含单独逻辑说明；功能为 stop -> start。
+- `usvctl.sh`：统一 CLI 分发入口，支持 `start`、`stop`、`restart`、`status`、`update`、`build`、`deploy`。
+- `install_usv_commands.sh`：向 `~/.local/bin` 安装/卸载 `usvctl`、`usvon`、`usvoff`、`usvrestart`、`usvstatus`、`usvupdate`、`usvbuild`、`usvdeploy` symlink。
+
+### 1.1 全局命令
+- `usvon`：后台启动完整 ROS 系统；等价 `usvctl start`，参数透传给 `roslaunch usv_ros usv_bringup.launch`。
+- `usvoff`：停止完整 ROS 系统；等价 `usvctl stop`。
+- `usvstatus`：输出进程、热点、外网、ROS 节点、MAVROS、bridge 状态；等价 `usvctl status`。
+- `usvrestart`：stop -> start；等价 `usvctl restart`，参数透传给 `roslaunch`。
+- `usvupdate`：仅在 `src/usv_ros/` 执行 `git pull --ff-only`；系统运行时拒绝执行。
+- `usvbuild`：在工作区根目录执行 `catkin_make`；系统运行时拒绝执行。
+- `usvdeploy`：stop -> update -> build -> start；用于 Nano 现场更新部署。
 
 ## 2. Launch 入口
 文件：`src/usv_ros/launch/usv_bringup.launch`
