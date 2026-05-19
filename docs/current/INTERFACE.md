@@ -134,6 +134,9 @@ Updated: 2026-04-26T19:40:51+08:00
 - `POST /api/injection-pump/on`
 - `POST /api/injection-pump/off`
 - `POST /api/injection-pump/set`
+- `POST /api/spectrometer/start`
+- `POST /api/spectrometer/stop`
+- `POST /api/spectrometer/baseline`: baseline must be stable first; the current valid spectrometer voltage becomes the absorbance reference voltage.
 - `GET /api/hardware/config`
 - `POST /api/hardware/config`
 - `GET /api/hardware/serial-ports`

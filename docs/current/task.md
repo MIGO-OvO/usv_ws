@@ -1215,3 +1215,22 @@ label=summary|fact=检测装置握手协议已覆盖四端：固件/ROS/Web/Wind
 - remember.summary.3=`summary|fact=docs interface updated|impact=handshake behavior documented|next=commit per repo`
 - remember.summary.4=`summary|fact=existing Windows constants.py uncommitted before task|impact=commit will include required handshake constants|next=git status isolate`
 - remember.summary.5=`summary|fact=lowerDevice deletions pre-existing in Windows repo|impact=not staged|next=avoid add -A`
+
+## 2026-05-18T00:00:00+08:00 implementation.web_spectro_perf_baseline
+- changed=`src/usv_ros/frontend/src/store.ts`
+  - changed=`voltage Socket.IO UI updates throttled to 200ms; angle telemetry throttled to 100ms`
+  - changed=`spectrometer reference/baseline flags tracked in UI state`
+- changed=`src/usv_ros/frontend/src/pages/Monitor.tsx`
+  - added=`POST /api/spectrometer/baseline` button for user-set absorbance reference after baseline stabilizes`
+- changed=`src/usv_ros/scripts/pump_control_node.py`
+  - changed=`default reference_voltage=0.0; ADSSTART clears reference; absorbance is unset until baseline reference is set`
+  - added=`set_baseline command sets reference voltage from current valid sample/click-time payload`
+- changed=`src/usv_ros/scripts/web_config_server.py`
+  - added=`POST /api/spectrometer/baseline`
+  - changed=`voltage Socket.IO payload includes reference_voltage/baseline_voltage/baseline_set`
+- changed=`src/usv_ros/README.md, src/usv_ros/TESTING.md, docs/current/INTERFACE.md`
+- verify=`python -m py_compile scripts/pump_control_node.py scripts/web_config_server.py -> rc=0`
+- verify=`python -m unittest discover -s tests -p "test_*.py" -> 40 tests OK`
+- verify=`npm run build -> rc=0; JS bundle 830.82 kB gzip 255.65 kB; Vite chunk-size warning remains`
+- verify=`npx eslint src/store.ts src/pages/Monitor.tsx src/components/injection-pump-card.tsx src/components/link-diagnostics-card.tsx -> rc=0`
+- note=`npm run lint still fails on pre-existing repo-wide lint debt outside this change scope`
