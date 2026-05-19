@@ -58,6 +58,7 @@ Updated: 2026-04-26T19:40:51+08:00
 - `/usv/spectrometer_status` `std_msgs/String`
 - `/usv/spectrometer_raw` `std_msgs/String`
 - `/usv/spectrometer_absorbance` `std_msgs/String`
+- `/usv/spectrometer_command` `std_msgs/String`
 - `/usv/mission_status` `std_msgs/String`
 - `/usv/detection_result` `std_msgs/String`
 - `/usv/trigger_status` `std_msgs/String`
@@ -69,6 +70,7 @@ Updated: 2026-04-26T19:40:51+08:00
 ### 3.2 订阅
 - `/usv/pump_command` `std_msgs/String`
 - `/usv/pump_step` `std_msgs/String`
+- `/usv/spectrometer_command` `std_msgs/String`
 - `/usv/mavlink_cmd_rx` `std_msgs/Float32MultiArray`
 - `/usv/mavlink_cmd_ack` `std_msgs/Float32MultiArray`
 - `/mavros/state` `mavros_msgs/State`
@@ -87,6 +89,7 @@ Updated: 2026-04-26T19:40:51+08:00
   - `SAMPLING:<wp_seq>`
   - `SAMPLING_DONE:<wp_seq>`
   - `RESUMING_AUTO:<wp_seq>`
+  - `SURVEYING:<interval_s>`
   - `HOLD_NO_MISSION:<wp_seq>`
   - `FAILED:<wp_seq>:<reason>`
   - `PAUSED:<wp_seq>`
@@ -136,7 +139,7 @@ Updated: 2026-04-26T19:40:51+08:00
 - `POST /api/injection-pump/set`
 - `POST /api/spectrometer/start`
 - `POST /api/spectrometer/stop`
-- `POST /api/spectrometer/baseline`: baseline must be stable first; the current valid spectrometer voltage becomes the absorbance reference voltage.
+- `POST /api/spectrometer/baseline`: baseline must have a valid spectrometer sample; the current valid voltage becomes `reference_voltage`. `reference_voltage=0.0` means baseline is not set.
 - `GET /api/hardware/config`
 - `POST /api/hardware/config`
 - `GET /api/hardware/serial-ports`
@@ -198,25 +201,33 @@ Updated: 2026-04-26T19:40:51+08:00
 文件：`src/usv_ros/scripts/usv_mavlink_router_bridge.py` 与 `mavlink_trigger_node.py`
 - 接收：`usv_mavlink_router_bridge.py` 通过 TCP `router_url` (默认 `127.0.0.1:5760`) 直接监听 `COMMAND_LONG` (`msgid=76`)，绕过 MAVROS。
 - 内部流转：网桥解析后通过 `/usv/mavlink_cmd_rx` (Float32MultiArray) 发给 `mavlink_trigger_node.py`。
-- 指令：`31010` `31011` `31012` `31013` `31014`
+- 指令范围：`31010..31017`
+- 指令：`31010` `31011` `31012` `31013` `31014` `31015` `31016` `31017`
 - 应答：触发节点执行后发布状态到 `/usv/mavlink_cmd_ack`，网桥封装为 `COMMAND_ACK` (`msgid=77`) 并通过 `router_url` 发送。
 - `31014`：发布 `CALXYZA\r\n`
+- `31015 MAV_CMD_USV_START_SURVEY`：`param1` 为走航采样间隔秒数，QGC 默认 `5`。
+- `31016 MAV_CMD_USV_STOP_SURVEY`：停止走航采样。
+- `31017 MAV_CMD_USV_SET_BASELINE`：`param1=0` 使用最新有效分光电压设 baseline；`param1>0` 使用显式参考电压；`param2..7=0`。
 
 ### 7.2 上行遥测
 文件：`src/usv_ros/scripts/usv_mavlink_router_bridge.py`
 - 连接：`router_url`，默认 `tcp:127.0.0.1:5760`
 - 消息：`HEARTBEAT`、`NAMED_VALUE_FLOAT`
 - 频率：`HEARTBEAT 1Hz`，载荷遥测 `2Hz`
-- 字段：`USV_VOLT` `USV_ABS` `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` `USV_STAT` `USV_PKT` `USV_STEP` `USV_STOT` `USV_SCNT` `USV_PERR` `USV_PMOD`
+- 字段：`USV_VOLT` `USV_ABS` `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` `USV_STAT` `USV_PKT` `USV_STEP` `USV_STOT` `USV_SCNT` `USV_PERR` `USV_PMOD` `USV_BSET` `USV_REF` `USV_BASE`
   - `USV_STEP`：当前自动化步骤号（float，整数编码）
   - `USV_STOT`：总步骤数（float，整数编码）
   - `USV_SCNT`：已采集样本计数（float，整数编码）
   - `USV_PERR`：PID 误差值（float）
   - `USV_PMOD`：PID 模式（float，0=空闲, 1=运行中, 2=已完成, 3=错误）
+  - `USV_BSET`：baseline 是否已设置，`0/1`
+  - `USV_REF`：reference voltage，单位 V
+  - `USV_BASE`：baseline voltage，单位 V
+  - `USV_STAT=14`：`SURVEYING`，QGC 用于区分走航检测和普通采样
 
 ### 7.3 飞控转发
 文件：`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`ardupilot-usv/Rover/sensors.cpp`
-- 接收缓存：`MAVLINK_MSG_ID_NAMED_VALUE_FLOAT`，缓存上述 13 个字段到 `rover.usv_payload`
+- 接收缓存：`MAVLINK_MSG_ID_NAMED_VALUE_FLOAT`，缓存上述 16 个字段到 `rover.usv_payload`
 - 转发函数：`Rover::usv_telemetry_send()`
 - 调度：`SCHED_TASK(usv_telemetry_send, 2, 200, 132)`
 
@@ -232,6 +243,9 @@ Updated: 2026-04-26T19:40:51+08:00
 - `sampleCount` <- `USV_SCNT`
 - `pidError` <- `USV_PERR`
 - `pidMode` <- `USV_PMOD`
+- `baselineSet` <- `USV_BSET`
+- `referenceVoltage` <- `USV_REF`
+- `baselineVoltage` <- `USV_BASE`
 - `linkActive`：5 秒超时后置 0
 
 
