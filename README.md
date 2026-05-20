@@ -70,6 +70,7 @@ cd /mnt/d/usv_ws/ardupilot-usv
 git submodule update --init --recursive
 ./waf configure --board Pixhawk6C
 ./waf rover
+cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 ```
 
 ## Git 约束

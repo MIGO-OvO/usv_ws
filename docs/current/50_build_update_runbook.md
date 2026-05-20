@@ -77,6 +77,7 @@ cd /mnt/d/usv_ws/ardupilot-usv
 git submodule update --init --recursive
 ./waf configure --board Pixhawk6C
 ./waf rover
+cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 ```
 
 生成固件后按现场刷写流程导入 Pixhawk 6C。禁止在 Windows PowerShell 中直接假定 waf 构建可用。
