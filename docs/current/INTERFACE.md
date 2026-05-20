@@ -201,20 +201,22 @@ Updated: 2026-04-26T19:40:51+08:00
 文件：`src/usv_ros/scripts/usv_mavlink_router_bridge.py` 与 `mavlink_trigger_node.py`
 - 接收：`usv_mavlink_router_bridge.py` 通过 TCP `router_url` (默认 `127.0.0.1:5760`) 直接监听 `COMMAND_LONG` (`msgid=76`)，绕过 MAVROS。
 - 内部流转：网桥解析后通过 `/usv/mavlink_cmd_rx` (Float32MultiArray) 发给 `mavlink_trigger_node.py`。
-- 指令范围：`31010..31017`
-- 指令：`31010` `31011` `31012` `31013` `31014` `31015` `31016` `31017`
+- 指令范围：`31010..31019`
+- 指令：`31010` `31011` `31012` `31013` `31014` `31015` `31016` `31017` `31018` `31019`
 - 应答：触发节点执行后发布状态到 `/usv/mavlink_cmd_ack`，网桥封装为 `COMMAND_ACK` (`msgid=77`) 并通过 `router_url` 发送。
 - `31014`：发布 `CALXYZA\r\n`
 - `31015 MAV_CMD_USV_START_SURVEY`：`param1` 为走航采样间隔秒数，QGC 默认 `5`。
 - `31016 MAV_CMD_USV_STOP_SURVEY`：停止走航采样。
 - `31017 MAV_CMD_USV_SET_BASELINE`：`param1=0` 使用最新有效分光电压设 baseline；`param1>0` 使用显式参考电压；`param2..7=0`。
+- `31018 MAV_CMD_USV_SPECTRO_START`：启动分光检测器信号采集；`param1..7=0`。
+- `31019 MAV_CMD_USV_SPECTRO_STOP`：停止分光检测器信号采集；`param1..7=0`。
 
 ### 7.2 上行遥测
 文件：`src/usv_ros/scripts/usv_mavlink_router_bridge.py`
 - 连接：`router_url`，默认 `tcp:127.0.0.1:5760`
 - 消息：`HEARTBEAT`、`NAMED_VALUE_FLOAT`
 - 频率：`HEARTBEAT 1Hz`，载荷遥测 `2Hz`
-- 字段：`USV_VOLT` `USV_ABS` `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` `USV_STAT` `USV_PKT` `USV_STEP` `USV_STOT` `USV_SCNT` `USV_PERR` `USV_PMOD` `USV_BSET` `USV_REF` `USV_BASE`
+- 字段：`USV_VOLT` `USV_ABS` `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` `USV_STAT` `USV_PKT` `USV_STEP` `USV_STOT` `USV_SCNT` `USV_PERR` `USV_PMOD` `USV_BSET` `USV_REF` `USV_BASE` `USV_VLD`
   - `USV_STEP`：当前自动化步骤号（float，整数编码）
   - `USV_STOT`：总步骤数（float，整数编码）
   - `USV_SCNT`：已采集样本计数（float，整数编码）
@@ -223,11 +225,12 @@ Updated: 2026-04-26T19:40:51+08:00
   - `USV_BSET`：baseline 是否已设置，`0/1`
   - `USV_REF`：reference voltage，单位 V
   - `USV_BASE`：baseline voltage，单位 V
+  - `USV_VLD`：分光检测器当前采样是否有效，`0/1`
   - `USV_STAT=14`：`SURVEYING`，QGC 用于区分走航检测和普通采样
 
 ### 7.3 飞控转发
 文件：`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`ardupilot-usv/Rover/sensors.cpp`
-- 接收缓存：`MAVLINK_MSG_ID_NAMED_VALUE_FLOAT`，缓存上述 16 个字段到 `rover.usv_payload`
+- 接收缓存：`MAVLINK_MSG_ID_NAMED_VALUE_FLOAT`，缓存上述 17 个字段到 `rover.usv_payload`
 - 转发函数：`Rover::usv_telemetry_send()`
 - 调度：`SCHED_TASK(usv_telemetry_send, 2, 200, 132)`
 
@@ -246,6 +249,7 @@ Updated: 2026-04-26T19:40:51+08:00
 - `baselineSet` <- `USV_BSET`
 - `referenceVoltage` <- `USV_REF`
 - `baselineVoltage` <- `USV_BASE`
+- `spectrometerValid` <- `USV_VLD`
 - `linkActive`：5 秒超时后置 0
 
 

@@ -19,7 +19,7 @@ MAVLink 是连接三端的桥梁，所有涉及 MAVLink 的开发与调试，必
 在编写任何 MAVLink 消息处理代码前，**必须**先查阅 `ardupilot-usv/` 对应的源码实现，禁止仅依赖通用 MAVLink 协议文档。
 *   **查阅命令处理逻辑**：
     *   路径：`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`
-    *   场景：开发 `mavlink_trigger_node.py` 接收 `COMMAND_LONG` (如 31010~31014) 时，必须对照该文件确认 `handle_command_long` 的具体参数解析逻辑（如 `param1` 对应何参数）及返回 `COMMAND_ACK` 的时机。
+    *   场景：开发 `mavlink_trigger_node.py` 接收 `COMMAND_LONG` (如 31010~31019) 时，必须对照该文件确认 `handle_command_long` 的具体参数解析逻辑（如 `param1` 对应何参数）及返回 `COMMAND_ACK` 的时机。
 *   **查阅遥测转发逻辑**：
     *   路径：`ardupilot-usv/Rover/sensors.cpp` 和 `Rover/Rover.h`
     *   场景：开发 `usv_mavlink_bridge.py` 解析遥测数据时，必须对照 `usv_telemetry_send()` 函数，确认数据结构体（如 `usv_payload`）的字段顺序、数据类型与发送频率。

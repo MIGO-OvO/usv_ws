@@ -37,9 +37,9 @@ bridge(sysid=1/compid=191) -[2Hz×13字段]-> mavlink-routerd -[UART]-> 飞控
 | UART | /dev/ttyTHS1:921600 | 飞控物理链路 |
 
 ## 4. 当前已实现能力
-- `mavlink_trigger_node.py` 处理 `31010~31014`，并回传 `COMMAND_ACK`。
+- `mavlink_trigger_node.py` 处理 `31010~31019`，并回传 `COMMAND_ACK`。
 - `mavlink_trigger_node.py` 将 `31014` 转换为 `CALXYZA\r\n` 并发布到 `/usv/pump_command`。
-- `usv_mavlink_router_bridge.py` 通过 `pymavlink` 向 `mavlink-routerd` 发送 13 个 `NAMED_VALUE_FLOAT` 字段：`USV_VOLT`、`USV_ABS`、`PUMP_X/Y/Z/A`、`USV_STAT`、`USV_PKT`、`USV_STEP`、`USV_STOT`、`USV_SCNT`、`USV_PERR`、`USV_PMOD`（线程安全队列模式）。
+- `usv_mavlink_router_bridge.py` 通过 `pymavlink` 向 `mavlink-routerd` 发送 17 个 `NAMED_VALUE_FLOAT` 字段：`USV_VOLT`、`USV_ABS`、`PUMP_X/Y/Z/A`、`USV_STAT`、`USV_PKT`、`USV_STEP`、`USV_STOT`、`USV_SCNT`、`USV_PERR`、`USV_PMOD`、`USV_BSET`、`USV_REF`、`USV_BASE`、`USV_VLD`（线程安全队列模式）。
 - `start_usv_all.sh`、`stop_usv_all.sh`、`status_usv_all.sh`（含 ROS 节点级检查 + MAVROS 连通检查 + bridge 诊断摘要）。
 - `bootstrap_workspace.bat` 为 Windows 提供唯一的外部仓库拉取入口，固定拉取 `ardupilot-usv`、`WQ-USV-QGroundControl`、`src/usv_ros`。
 - 根 `.gitignore` 忽略三方源码目录与本地构建产物，保证总管理仓库只提交文档与入口文件。
@@ -59,10 +59,10 @@ bridge(sysid=1/compid=191) -[2Hz×13字段]-> mavlink-routerd -[UART]-> 飞控
 - `web_config_server.py` 新增航点采样配置 CRUD API（`/api/waypoint-sampling`）和任务配置导入导出（`/api/mission-config/export|import`）。
 - 前端新增 `WaypointSamplingCard` 航点采样编辑器和任务配置导入/导出入口。
 - 前端启动任务时自动携带最新 `waypoint_sampling` 下发。
-- QGC `USVPayloadPanel.qml` 命令发送 `showError=true`，命令超时/拒绝时弹出 toast。
+- QGC `USVPayloadPanel.qml` 命令发送 `showError=false`，面板内按链路、有效采样、baseline 和任务状态显示流程状态。
 - QGC `USVSamplingDataView.qml` 采样数据独立顶层页面（与航行/规划/配置同级），包含实时电压/吸光度曲线、采样任务概览、泵组状态与PID监控、统计分析。
 - `usv_mavlink_router_bridge.py` 新增 `USV_STEP`/`USV_STOT`/`USV_SCNT`/`USV_PERR`/`USV_PMOD` 遥测字段，支持采样步骤进度、样本计数、PID状态上报。
-- ArduRover `usv_payload` 已缓存并以 2Hz 中继上述 13 个载荷遥测字段。
+- ArduRover `usv_payload` 已缓存并以 2Hz 中继上述 17 个载荷遥测字段。
 - `pump_control_node.py` 自动化步骤等待顺序：电机/PID 完成 -> 进样泵 `duration_ms` -> ADS 采集中时等待 1 条新的 valid 分光样本。
 
 ## 5. 当前运行约束
@@ -80,7 +80,7 @@ bridge(sysid=1/compid=191) -[2Hz×13字段]-> mavlink-routerd -[UART]-> 飞控
 |---|---|---|---|
 | `ardupilot-usv` | `v0.2.0-stable` | `56741bb0fa` | 含 NAMED_VALUE_FLOAT 路由阻断 + 2Hz 重发 |
 | `src/usv_ros` | `v0.2.0-stable` | `63ae83ec` | 含线程安全队列 + MAVROS UDP 隔离 + 遥测解耦 |
-| `WQ-USV-QGroundControl` | `v0.2.0-stable` | `af6c56478` | 含 showError=true + UI 优化 |
+| `WQ-USV-QGroundControl` | `v0.2.0-stable` | `af6c56478` | 含载荷面板 UI 优化 |
 
 回滚命令：
 ```bash
