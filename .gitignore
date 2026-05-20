@@ -3,6 +3,8 @@
 /WQ-USV-QGroundControl/
 /src/
 /reference/
+/MotorControlApp_Pyside6/
+/docs/CGEDC/
 
 # 工作区构建产物
 /src/CMakeLists.txt
