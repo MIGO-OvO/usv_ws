@@ -1,6 +1,6 @@
 # 系统概览
 
-Updated: 2026-05-20
+Updated: 2026-05-25
 
 ## 五端结构
 
@@ -16,7 +16,8 @@ Updated: 2026-05-20
 
 ```text
 QGroundControl custom UI
-  | COMMAND_LONG 31010..31019
+  | Plan: MAV_CMD_NAV_SCRIPT_TIME(param1=1)
+  | Manual: COMMAND_LONG 31010..31019
   | NAMED_VALUE_FLOAT payload display
   v
 Pixhawk 6C / ardupilot-usv
@@ -37,10 +38,11 @@ ESP32 detector firmware
 ## 采样任务闭环
 
 ```text
-NAV_SCRIPT_TIME
+NAV_SCRIPT_TIME(param1=1)
   -> ardupilot-usv sends NAMED_VALUE_FLOAT USV_SMPL
   -> usv_mavlink_router_bridge.py publishes /usv/mavlink_cmd_rx
   -> mavlink_trigger_node.py starts ROS sampling
+  -> trigger_status sampling_started
   -> pump_control_node.py executes detector sequence
   -> trigger_status sampling_stopped
   -> usv_mavlink_router_bridge.py sends NAMED_VALUE_FLOAT USV_DONE
@@ -49,9 +51,11 @@ NAV_SCRIPT_TIME
 
 ## 当前能力
 
-- `COMMAND_LONG 31010..31019`：采样、停止、暂停、恢复、校准、走航、基线、分光启停。
+- 航线定点采样只使用 `MAV_CMD_NAV_SCRIPT_TIME`，`param1=1` 表示 USV 定点采样，`param2` 为 1..255 秒超时。
+- `COMMAND_LONG 31010..31019`：手动采样、停止、暂停、恢复、校准、走航、基线、分光启停。
 - 17 个 `NAMED_VALUE_FLOAT` 载荷字段：`USV_VOLT`、`USV_ABS`、`PUMP_X`、`PUMP_Y`、`PUMP_Z`、`PUMP_A`、`USV_STAT`、`USV_PKT`、`USV_STEP`、`USV_STOT`、`USV_SCNT`、`USV_PERR`、`USV_PMOD`、`USV_BSET`、`USV_REF`、`USV_BASE`、`USV_VLD`。
 - 固件缓存载荷字段并以 2 Hz 转发到 GCS。
+- Web 数据中心跟随 `sampling_started` / `sampling_stopped` 采样生命周期自动建档和停止，不只依赖 Web 端启动任务。
 - `mavlink-routerd` 独占飞控串口，MAVROS 与自定义 bridge 分离。
 - `usvctl`、`usvon`、`usvoff`、`usvstatus`、`usvdeploy` 管理现场启动更新。
 - `web_config_server.py` 提供 Web API、Socket.IO 实时数据、日志与链路诊断。
