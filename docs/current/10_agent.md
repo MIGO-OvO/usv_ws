@@ -1,6 +1,6 @@
 # Agent 协同规范
 
-Updated: 2026-05-25
+Updated: 2026-06-03
 
 ## 角色
 
@@ -32,7 +32,7 @@ Updated: 2026-05-25
 - QGC Plan 航线定点采样使用 `MAV_CMD_NAV_SCRIPT_TIME(param1=1)`；手动载荷控制发送 `COMMAND_LONG 31010..31019`。
 - ROS `usv_mavlink_router_bridge.py` 从 router TCP 收命令，发布 `/usv/mavlink_cmd_rx`。
 - ROS `mavlink_trigger_node.py` 解释命令，控制采样/校准/走航/分光。
-- ROS `usv_mavlink_router_bridge.py` 以 `NAMED_VALUE_FLOAT` 发送 17 个载荷字段。
+- ROS `usv_mavlink_router_bridge.py` 以 `NAMED_VALUE_FLOAT` 发送 22 个载荷字段，其中 5 个为系统健康字段。
 - ArduRover `GCS_MAVLink_Rover.cpp` 缓存字段，`sensors.cpp` 以 2 Hz 转发到 GCS。
 - `NAV_SCRIPT_TIME(param1=1)` 触发时，固件发 `USV_SMPL`；ROS 完成采样后回 `USV_DONE`。
 

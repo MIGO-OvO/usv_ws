@@ -1,6 +1,6 @@
 # 开发需求与状态
 
-Updated: 2026-05-20
+Updated: 2026-06-03
 
 本文件替代旧 `roadmap.md`，只记录当前有效需求和状态。
 
@@ -11,7 +11,8 @@ Updated: 2026-05-20
 | ROS 主启动链路 | 已完成 | `src/usv_ros/launch/usv_bringup.launch` |
 | MAVLink router bridge | 已完成 | `src/usv_ros/scripts/usv_mavlink_router_bridge.py` |
 | MAVLink 指令节点 | 已完成 | `src/usv_ros/scripts/mavlink_trigger_node.py` |
-| 17 字段载荷遥测 | 已完成 | `usv_mavlink_router_bridge.py`、`ardupilot-usv/Rover/sensors.cpp` |
+| 22 字段载荷遥测 | 已完成 | `usv_mavlink_router_bridge.py`、`ardupilot-usv/Rover/sensors.cpp` |
+| Jetson/ROS/ESP32 健康监测 | 已完成 | `system_health_node.py`、`pump_control_node.py`、Web 监控页 |
 | 固件侧字段缓存与 2 Hz 转发 | 已完成 | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`Rover/sensors.cpp` |
 | `NAV_SCRIPT_TIME -> USV_SMPL -> ROS采样 -> USV_DONE` | 已完成 | `usv_mavlink_router_bridge.py`、`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` |
 | Web 控制台与 API | 已完成 | `src/usv_ros/scripts/web_config_server.py`、`src/usv_ros/frontend/` |
@@ -25,7 +26,7 @@ Updated: 2026-05-20
 | 实船联调 | 验证电台、router、MAVROS、QGC 面板全链路 | `70_verification.md` |
 | 采样可靠性 | 验证航点等待、稳定判定、失败策略 | `mavlink_trigger_node.py` |
 | 检测装置长期运行 | 验证串口重连、分光数据有效位、泵控反馈 | `pump_control_node.py` |
-| QGC 展示一致性 | 核对 17 字段名称、状态码、component id | `WQ-USV-QGroundControl/custom/` |
+| QGC 展示一致性 | 核对 22 字段名称、状态码、component id | `WQ-USV-QGroundControl/custom/` |
 
 ## 待办
 

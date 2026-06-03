@@ -1,6 +1,6 @@
 # 验证矩阵
 
-Updated: 2026-05-25
+Updated: 2026-06-03
 
 ## 静态验证
 
@@ -10,7 +10,7 @@ Updated: 2026-05-25
 | 归档存在 | `Test-Path docs/archive/2026-05-20-current-pre-restructure` | 返回 true |
 | 本地路径引用 | 手动/脚本检查反引号路径 | 根仓库内路径存在；外部子仓库路径明确 |
 | 旧入口污染 | 搜索旧入口名、旧字段数、旧频率说法 | current 不出现过时说法 |
-| MAVLink 字段 | 对照 `GCS_MAVLink_Rover.cpp`、`sensors.cpp`、`Rover.h` | 17 字段名称一致 |
+| MAVLink 字段 | 对照 `GCS_MAVLink_Rover.cpp`、`sensors.cpp`、`Rover.h`、QGC FactGroup | 22 字段名称一致 |
 | Mission 采样指令 | 对照 `mode_auto.cpp`、QGC `MavCmdInfoRover.json` | 航线定点采样为 `MAV_CMD_NAV_SCRIPT_TIME`，不使用 mission `31010` |
 | COMMAND_LONG | 对照 `mavlink_trigger_node.py`、`usv_mavlink_router_bridge.py` | 手动 `31010..31019` 一致 |
 | 串口握手 | 对照 `pump_control_node.py`、`DetFirmware/src/main.cpp` | `HELLO?` / `DET_ID` 一致 |
@@ -23,6 +23,7 @@ Updated: 2026-05-25
 | Launch 参数 | `roslaunch usv_ros usv_bringup.launch --dump-params` | 参数可展开 |
 | 单元测试 | `python3 -m unittest discover -s src/usv_ros/tests -p 'test_*.py'` | 全部通过 |
 | 前端构建 | `cd src/usv_ros/frontend && npm run build` | 构建成功；产物写入 `static/dist` |
+| 系统健康节点 | `rostopic echo -n 1 /usv/system_health` | Jetson、detector、ROS 节点字段存在 |
 
 ## MAVLink 联调
 
@@ -32,7 +33,8 @@ Updated: 2026-05-25
 | MAVROS 连接 | `rostopic echo -n 1 /mavros/state` | `connected: True` |
 | QGC 手动命令 | QGC 发送 `COMMAND_LONG 31010` | `/usv/mavlink_cmd_rx` 收到，trigger 发布状态，ACK 返回 |
 | 校准命令 | QGC 发送 `31014` | `/usv/pump_command` 出现 `CALXYZA` |
-| 遥测字段 | 运行 bridge | QGC 显示 17 字段；固件 2 Hz 转发 |
+| 遥测字段 | 运行 bridge | QGC 显示 22 字段；固件 2 Hz 转发 |
+| 健康遥测 | 运行 system health + bridge | QGC 显示 `USV_JTMP/ETMP/JCPU/JMEM/EHEAP` 对应 Fact |
 | 电台链路 | RADIO_STATUS 输入 | `/usv/radio_status` 有 rssi/remrssi/noise 等字段 |
 
 ## 采样闭环验证
@@ -52,8 +54,18 @@ Updated: 2026-05-25
 | 串口识别 | Web 测试端口或 ROS 启动 | 返回 `DET_ID:USV_DETECTOR*` |
 | 角度帧 | 监听 `/usv/pump_angles` | X/Y/Z/A 持续更新 |
 | 分光帧 | 监听 `/usv/spectrometer_voltage` | voltage/absorbance/valid 字段存在 |
+| 健康帧 | 监听 `/usv/detector_health` | `temperature_c`、`heap_percent_free`、`task_stack_hwm` 字段存在 |
 | 基线 | Web 或 MAVLink `31017` | `USV_BSET=1`，`USV_BASE` 更新 |
 | 自动化 | 启动采样序列 | step/total/sample_count 递增 |
+
+## Web 系统健康验证
+
+| 项 | 方法 | 通过标准 |
+|---|---|---|
+| REST 快照 | `curl http://127.0.0.1:5000/api/diagnostics/system` | `success=true`，包含 `latest` 和 `history` |
+| Socket.IO | 打开 Web 监控页 | 系统健康卡片随 `/usv/system_health` 更新 |
+| Jetson 指标 | 查看 Web/ROS JSON | CPU、内存、温度、uptime 字段存在；无温度传感器时为 `null` |
+| ESP32 指标 | 查看 Web/ROS JSON | 串口健康帧在线时显示温度、heap、任务栈水位 |
 
 ## 现场验证记录模板
 

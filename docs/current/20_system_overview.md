@@ -1,6 +1,6 @@
 # 系统概览
 
-Updated: 2026-05-25
+Updated: 2026-06-03
 
 ## 五端结构
 
@@ -30,6 +30,7 @@ mavlink-routerd on Jetson
 ROS Noetic / usv_ros
   |-- mavlink_trigger_node.py
   |-- web_config_server.py
+  |-- system_health_node.py
   |-- pump_control_node.py
   v
 ESP32 detector firmware
@@ -53,8 +54,9 @@ NAV_SCRIPT_TIME(param1=1)
 
 - 航线定点采样只使用 `MAV_CMD_NAV_SCRIPT_TIME`，`param1=1` 表示 USV 定点采样，`param2` 为 1..255 秒超时。
 - `COMMAND_LONG 31010..31019`：手动采样、停止、暂停、恢复、校准、走航、基线、分光启停。
-- 17 个 `NAMED_VALUE_FLOAT` 载荷字段：`USV_VOLT`、`USV_ABS`、`PUMP_X`、`PUMP_Y`、`PUMP_Z`、`PUMP_A`、`USV_STAT`、`USV_PKT`、`USV_STEP`、`USV_STOT`、`USV_SCNT`、`USV_PERR`、`USV_PMOD`、`USV_BSET`、`USV_REF`、`USV_BASE`、`USV_VLD`。
+- 22 个 `NAMED_VALUE_FLOAT` 载荷字段：17 个采样/分光/泵控字段，加 `USV_JTMP`、`USV_ETMP`、`USV_JCPU`、`USV_JMEM`、`USV_EHEAP` 系统健康字段。
 - 固件缓存载荷字段并以 2 Hz 转发到 GCS。
+- `system_health_node.py` 聚合 Jetson CPU/内存/温度、ROS 节点和 ESP32 主控健康状态，Web 监控页可查看。
 - Web 数据中心跟随 `sampling_started` / `sampling_stopped` 采样生命周期自动建档和停止，不只依赖 Web 端启动任务。
 - `mavlink-routerd` 独占飞控串口，MAVROS 与自定义 bridge 分离。
 - `usvctl`、`usvon`、`usvoff`、`usvstatus`、`usvdeploy` 管理现场启动更新。

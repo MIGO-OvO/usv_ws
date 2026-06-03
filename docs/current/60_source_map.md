@@ -1,6 +1,6 @@
 # 源码地图
 
-Updated: 2026-05-20
+Updated: 2026-06-03
 
 ## 根仓库
 
@@ -24,9 +24,10 @@ Updated: 2026-05-20
 | `src/usv_ros/scripts/stop_usv_all.sh` | 停止主系统/router/roscore |
 | `src/usv_ros/scripts/status_usv_all.sh` | 进程、热点、MAVROS、bridge 诊断 |
 | `src/usv_ros/scripts/usvctl.sh` | `usvctl/usvon/usvoff/usvdeploy` 分发入口 |
-| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、17 字段遥测、命令接收、ACK、`USV_DONE` |
+| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、22 字段遥测、命令接收、ACK、`USV_DONE` |
 | `src/usv_ros/scripts/mavlink_trigger_node.py` | `31010..31019` 命令解释、采样状态机、航点采样 |
 | `src/usv_ros/scripts/pump_control_node.py` | 检测装置串口、自动化、分光、泵控 |
+| `src/usv_ros/scripts/system_health_node.py` | Jetson CPU/内存/温度、ROS 节点、ESP32 健康聚合 |
 | `src/usv_ros/scripts/web_config_server.py` | Flask API、Socket.IO、配置、日志、诊断 |
 | `src/usv_ros/frontend/` | React/Vite Web 前端 |
 | `src/usv_ros/static/dist/` | Web 前端构建产物 |
@@ -38,7 +39,7 @@ Updated: 2026-05-20
 |---|---|
 | `ardupilot-usv/AGENTS.md` | 固件仓库 AI 贡献规则 |
 | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` | `NAMED_VALUE_FLOAT` 缓存、`USV_DONE` 处理、MAVLink 消息入口 |
-| `ardupilot-usv/Rover/sensors.cpp` | `usv_telemetry_send()`，2 Hz 转发 17 字段 |
+| `ardupilot-usv/Rover/sensors.cpp` | `usv_telemetry_send()`，2 Hz 转发 22 字段 |
 | `ardupilot-usv/Rover/Rover.h` | `usv_payload` 结构体字段 |
 | `ardupilot-usv/Rover/mode_auto.cpp` | mission script/NAV_SCRIPT_TIME 相关逻辑 |
 | `ardupilot-usv/libraries/GCS_MAVLink/` | MAVLink 路由、流控、消息基础实现 |
@@ -59,7 +60,8 @@ Updated: 2026-05-20
 
 | 路径 | 职责 |
 |---|---|
-| `DetFirmware/src/main.cpp` | ESP32 主控固件、串口命令、二进制帧 |
+| `DetFirmware/src/main.cpp` | ESP32 主控固件、串口命令、角度/分光/健康二进制帧 |
+| `DetFirmware/src/protocol_packets.h` | ESP32 二进制帧格式定义 |
 | `DetFirmware/platformio.ini` | ESP32 构建配置，如存在则优先使用 |
 | `MotorControlApp_Pyside6/` | Windows 上位机源码与调试入口 |
 
@@ -69,6 +71,7 @@ Updated: 2026-05-20
 |---|---|
 | QGC 发命令 ROS 不响应 | `USVFirmwarePlugin.cc` -> `usv_mavlink_router_bridge.py` -> `mavlink_trigger_node.py` |
 | QGC 不显示载荷 | `usv_mavlink_router_bridge.py` -> `GCS_MAVLink_Rover.cpp` -> `sensors.cpp` -> `USVPayloadFactGroup.cc` |
+| Web 不显示系统健康 | `system_health_node.py` -> `/usv/system_health` -> `web_config_server.py` -> `frontend/src/components/system-health-card.tsx` |
 | 航点采样不继续 | `mode_auto.cpp` -> `USV_SMPL/USV_DONE` -> `mavlink_trigger_node.py` |
 | router/MAVROS 冲突 | `common_env.sh`、`usv_bringup.launch` |
-| 分光数据无效 | `pump_control_node.py`、`DetFirmware/src/main.cpp`、Web Socket.IO payload |
+| 分光或健康数据无效 | `pump_control_node.py`、`DetFirmware/src/main.cpp`、Web Socket.IO payload |
