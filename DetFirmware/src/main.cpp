@@ -55,6 +55,11 @@ SemaphoreHandle_t i2cMutex;
 bool g_angleStreamActive = false;
 unsigned long g_lastAngleSendTime = 0;
 const unsigned long ANGLE_SEND_INTERVAL = 20;  // 50Hz
+TaskHandle_t g_loopTaskHandle = NULL;
+TaskHandle_t g_commsTaskHandle = NULL;
+TaskHandle_t g_sensorsTaskHandle = NULL;
+unsigned long g_lastHealthSendTime = 0;
+const unsigned long HEALTH_SEND_INTERVAL = 1000;  // 1Hz
 
 // ============== PID 测试模式相关定义 ==============
 #define PID_TEST_MAX_SAMPLES 200    // 最大采样点�?
@@ -288,6 +293,7 @@ void stopPIDTest();
 
 // 角度流函数声�?
 void sendAnglePacket();
+void sendHealthPacket();
 void sendIdentity();
 void initTaskWatchdog();
 void registerCurrentTaskWatchdog();
@@ -366,10 +372,11 @@ void setup() {
     Serial.println("Injection pump initialized on GPIO2.");
     sendIdentity();
     initTaskWatchdog();
+    g_loopTaskHandle = xTaskGetCurrentTaskHandle();
     registerCurrentTaskWatchdog();
 
-    xTaskCreatePinnedToCore(TaskComms, "Comms", 8192, NULL, 2, NULL, 0);
-    xTaskCreatePinnedToCore(TaskSensors, "Sensors", 4096, NULL, 1, NULL, 0);
+    xTaskCreatePinnedToCore(TaskComms, "Comms", 8192, NULL, 2, &g_commsTaskHandle, 0);
+    xTaskCreatePinnedToCore(TaskSensors, "Sensors", 4096, NULL, 1, &g_sensorsTaskHandle, 0);
 }
 
 // --- Loop (Core 1 - Motor Task) ---
@@ -611,6 +618,11 @@ void TaskComms(void *pvParameters) {
                 runCalibrationPID();
                 lastCalTime = millis();
             }
+        }
+
+        if (millis() - g_lastHealthSendTime >= HEALTH_SEND_INTERVAL) {
+            sendHealthPacket();
+            g_lastHealthSendTime = millis();
         }
 
         // 普通PID定位循环（包括测试模式，因为测试模式也使用PID定位�?
@@ -1233,6 +1245,45 @@ void sendAnglePacket() {
 // 保留旧函数名兼容性，内部调用新函�?
 void sendAngles() {
     sendAnglePacket();
+}
+
+static uint16_t clampStackHighWaterMark(TaskHandle_t handle) {
+    if (handle == NULL) {
+        return 0;
+    }
+    UBaseType_t value = uxTaskGetStackHighWaterMark(handle);
+    return value > 65535 ? 65535 : (uint16_t)value;
+}
+
+void sendHealthPacket() {
+    SystemHealthPacket packet;
+    memset(&packet, 0, sizeof(packet));
+    packet.head1 = PACKET_HEADER1;
+    packet.head2 = HEADER2_HEALTH;
+    packet.version = 1;
+    packet.flags = 0x03;
+    packet.timestamp_ms = millis();
+    packet.uptime_s = packet.timestamp_ms / 1000UL;
+
+    float tempC = temperatureRead();
+    packet.temp_c_x10 = (int16_t)(tempC * 10.0f);
+    packet.cpu_freq_mhz = (uint16_t)ESP.getCpuFreqMHz();
+    packet.heap_free = ESP.getFreeHeap();
+    packet.heap_min_free = ESP.getMinFreeHeap();
+    packet.heap_total = ESP.getHeapSize();
+    packet.task_count = uxTaskGetNumberOfTasks() > 255 ? 255 : (uint8_t)uxTaskGetNumberOfTasks();
+    packet.loop_stack_hwm = clampStackHighWaterMark(g_loopTaskHandle);
+    packet.comms_stack_hwm = clampStackHighWaterMark(g_commsTaskHandle);
+    packet.sensors_stack_hwm = clampStackHighWaterMark(g_sensorsTaskHandle);
+
+    uint8_t* data = (uint8_t*)&packet.head2;
+    packet.checksum = 0;
+    for (int i = 0; i < (int)sizeof(SystemHealthPacket) - 3; i++) {
+        packet.checksum ^= data[i];
+    }
+    packet.tail = PACKET_TAIL;
+
+    Serial.write((uint8_t*)&packet, sizeof(packet));
 }
 
 void sendIdentity() {

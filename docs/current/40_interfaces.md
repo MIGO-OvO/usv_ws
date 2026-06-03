@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-05-25
+Updated: 2026-06-03
 
 ## ROS Launch
 
@@ -15,6 +15,7 @@ Updated: 2026-05-25
 | `mavros_fcu_url` | `udp://127.0.0.1:14550@` | MAVROS 连接 router UDP |
 | `mavlink_router_url` | `tcp:127.0.0.1:5760` | 自定义 bridge 连接 router TCP |
 | `mavlink_source_component` | `191` | companion component id |
+| `enable_system_health` | `true` | 启动 Jetson/ROS/ESP32 健康聚合节点 |
 
 ## ROS Topics / Services
 
@@ -29,6 +30,8 @@ Updated: 2026-05-25
 | `/usv/pump_status` | `String` | pump -> Web/trigger | 泵控和自动化状态 |
 | `/usv/pump_angles` | `String` | pump -> bridge/Web | X/Y/Z/A 角度 |
 | `/usv/spectrometer_voltage` | `String` | pump -> bridge/Web | 电压、吸光度、基线、有效位 |
+| `/usv/detector_health` | `String(JSON)` | pump -> system/Web | ESP32 温度、heap、任务栈水位等 |
+| `/usv/system_health` | `String(JSON)` | system -> Web/bridge | Jetson、ESP32、ROS 节点聚合健康状态 |
 | `/usv/bridge_diagnostics` | `String` | bridge -> Web | router bridge 诊断 |
 | `/usv/radio_status` | `String` | bridge -> Web | RADIO_STATUS 电台链路 |
 | `/usv/pump_reconnect` | `Trigger` | Web -> pump | 保存硬件配置后重连 |
@@ -76,6 +79,11 @@ Updated: 2026-05-25
 | `USV_REF` | 参考电压 |
 | `USV_BASE` | 基线电压 |
 | `USV_VLD` | 分光数据有效位 |
+| `USV_JTMP` | Jetson CPU/SoC 温度，单位 °C；未知为 `-1` |
+| `USV_ETMP` | ESP32 内部温度，单位 °C；未知为 `-1` |
+| `USV_JCPU` | Jetson CPU 使用率，单位 `%`；未知为 `-1` |
+| `USV_JMEM` | Jetson 内存使用率，单位 `%`；未知为 `-1` |
+| `USV_EHEAP` | ESP32 可用 heap 百分比，单位 `%`；未知为 `-1` |
 | `USV_SMPL` | 固件在 `NAV_SCRIPT_TIME(param1=1)` 触发 ROS 定点采样 |
 | `USV_SURV` | 固件触发走航采样开关 |
 | `USV_DONE` | ROS 通知固件采样完成 |
@@ -94,6 +102,7 @@ Updated: 2026-05-25
 - 航点采样配置 CRUD。
 - 日志列表、日志读取、日志下载。
 - 链路诊断、电台状态、bridge 诊断。
+- 系统健康：`GET /api/diagnostics/system`；Socket.IO 事件 `system_health`。
 
 ## 检测装置串口协议
 
@@ -103,8 +112,13 @@ Updated: 2026-05-25
 | 默认波特率 | `115200` |
 | 握手命令 | `HELLO?\r\n`、`DET?\r\n` |
 | 期望响应 | `DET_ID:USV_DETECTOR*` |
-| 二进制帧 | 角度、PID、测试、分光数据 |
+| 二进制帧 | 角度、PID、测试、分光数据、系统健康 |
 | 分光帧头 | `0xDD` |
+| 健康帧头 | `0x55 0xEE`，37 字节，1 Hz |
 | 文本命令示例 | `CALXYZA\r\n` |
 
 串口协议变更必须同时核对 `DetFirmware/src/main.cpp` 与 `src/usv_ros/scripts/pump_control_node.py`。
+
+健康帧字段：`version`、`flags`、`timestamp_ms`、`uptime_s`、`temp_c_x10`、`cpu_freq_mhz`、
+`heap_free`、`heap_min_free`、`heap_total`、`task_count`、`loop_stack_hwm`、`comms_stack_hwm`、
+`sensors_stack_hwm`、`checksum`、`0x0A`。ROS 会换算为 `/usv/detector_health` JSON。

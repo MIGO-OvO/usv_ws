@@ -11,6 +11,7 @@
 #define HEADER2_TEST        0xBB  // PID 测试结果包
 #define HEADER2_ANGLE       0xCC  // 角度数据包
 #define HEADER2_SPECTRO     0xDD  // 分光数据包
+#define HEADER2_HEALTH      0xEE  // 系统健康数据包
 
 // ============== 数据包结构定义 ==============
 #pragma pack(push, 1)
@@ -77,6 +78,30 @@ typedef struct {
 
 static_assert(sizeof(SpectroDataPacket) == 18, "SpectroDataPacket must be 18 bytes");
 
+// 系统健康数据包 (0xEE) - 37字节
+// flags bit0: temperature valid, bit1: heap data valid
+typedef struct {
+    uint8_t  head1;              // 0x55
+    uint8_t  head2;              // 0xEE
+    uint8_t  version;            // 协议版本, 当前为1
+    uint8_t  flags;              // 状态位
+    uint32_t timestamp_ms;       // millis()
+    uint32_t uptime_s;           // 启动后秒数
+    int16_t  temp_c_x10;         // ESP32内部温度 * 10
+    uint16_t cpu_freq_mhz;       // CPU频率
+    uint32_t heap_free;          // 当前空闲heap
+    uint32_t heap_min_free;      // 历史最小空闲heap
+    uint32_t heap_total;         // heap总量
+    uint8_t  task_count;         // FreeRTOS任务数
+    uint16_t loop_stack_hwm;     // loop任务栈高水位
+    uint16_t comms_stack_hwm;    // 通信任务栈高水位
+    uint16_t sensors_stack_hwm;  // 传感器任务栈高水位
+    uint8_t  checksum;           // XOR校验和
+    uint8_t  tail;               // 0x0A
+} SystemHealthPacket;
+
+static_assert(sizeof(SystemHealthPacket) == 37, "SystemHealthPacket must be 37 bytes");
+
 #pragma pack(pop)
 
 // ============== 分光包状态位 ==============
@@ -90,5 +115,6 @@ static_assert(sizeof(SpectroDataPacket) == 18, "SpectroDataPacket must be 18 byt
 #define PACKET_SIZE_TEST    18
 #define PACKET_SIZE_ANGLE   20
 #define PACKET_SIZE_SPECTRO sizeof(SpectroDataPacket)
+#define PACKET_SIZE_HEALTH  sizeof(SystemHealthPacket)
 
 #endif // PROTOCOL_PACKETS_H
