@@ -100,6 +100,7 @@ Updated: 2026-06-03
 - 分光基线设置与电压/吸光度实时推送。
 - 数据中心跟随 `sampling_started` 自动建档，跟随 `sampling_stopped` / `survey_stopped` 停止记录。
 - 航点采样配置 CRUD。
+- 实验模式地图航点：`GET/POST/DELETE /api/lab/route`，用于读取、保存、清空 Web 点击生成的实验航线。
 - 日志列表、日志读取、日志下载。
 - 链路诊断、电台状态、bridge 诊断。
 - 系统健康：`GET /api/diagnostics/system`；Socket.IO 事件 `system_health`。
