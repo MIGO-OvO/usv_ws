@@ -38,10 +38,14 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 
 #define DET_FIRMWARE_ID "USV_DETECTOR"
 #define DET_FIRMWARE_VERSION "2026.04.25"
-#define COMMS_TASK_DELAY_MS 1
-#define SENSOR_TASK_DELAY_MS 2
+#define COMMS_TASK_DELAY_MS 5
+#define SENSOR_TASK_DELAY_ACTIVE_MS 5
+#define SENSOR_TASK_DELAY_IDLE_MS 20
 #define MAX_COMMAND_LENGTH 160
 #define TASK_WDT_TIMEOUT_SEC 5
+#define STRESS_DEFAULT_DURATION_S 300UL
+#define STRESS_MAX_DURATION_S 1800UL
+#define STRESS_BUSY_SLICE_MS 40UL
 
 #define MAX_OPEN_LOOP_RPM 20.0f
 #define MAX_COMMAND_DEGREES 3600.0f
@@ -58,8 +62,29 @@ const unsigned long ANGLE_SEND_INTERVAL = 20;  // 50Hz
 TaskHandle_t g_loopTaskHandle = NULL;
 TaskHandle_t g_commsTaskHandle = NULL;
 TaskHandle_t g_sensorsTaskHandle = NULL;
+TaskHandle_t g_stressCore0TaskHandle = NULL;
+TaskHandle_t g_stressCore1TaskHandle = NULL;
 unsigned long g_lastHealthSendTime = 0;
 const unsigned long HEALTH_SEND_INTERVAL = 1000;  // 1Hz
+volatile unsigned long g_maxActiveLoopGapUs = 0;
+
+enum StressMode {
+    STRESS_MODE_CPU,
+    STRESS_MODE_FULL
+};
+
+volatile bool g_stressActive = false;
+volatile bool g_stressDonePending = false;
+volatile StressMode g_stressMode = STRESS_MODE_CPU;
+volatile unsigned long g_stressStartMs = 0;
+volatile unsigned long g_stressDurationS = 0;
+volatile uint32_t g_stressSinkU32 = 0;
+volatile float g_stressSinkF = 0.0f;
+unsigned long g_stressLastVirtualAnglePacketMs = 0;
+unsigned long g_stressLastVirtualSpectroPacketMs = 0;
+unsigned long g_stressLastVirtualPIDPacketMs = 0;
+uint8_t g_stressVirtualPidMotor = 0;
+uint32_t g_stressVirtualSampleCounter = 0;
 
 // ============== PID 测试模式相关定义 ==============
 #define PID_TEST_MAX_SAMPLES 200    // 最大采样点�?
@@ -253,6 +278,8 @@ const byte motorPins[4][2] = {
 // --- 函数声明 ---
 void TaskComms(void *pvParameters);
 void TaskSensors(void *pvParameters);
+void TaskStressCore0(void *pvParameters);
+void TaskStressCore1(void *pvParameters);
 float readAngleWithRetry(uint8_t channel);
 void sendAngles();
 float rpmToInterval(float rpm);
@@ -298,6 +325,20 @@ void sendIdentity();
 void initTaskWatchdog();
 void registerCurrentTaskWatchdog();
 void feedTaskWatchdog();
+bool isDetectorMotionActive();
+void parseStressCommand(String cmd);
+void startStressTest(unsigned long durationS, StressMode mode);
+void stopStressTest(bool completed);
+void updateStressTest();
+void sendStressStatus();
+void runStressWorkerSlice(uint8_t workerId);
+const char* stressModeName();
+bool isStressFullActive();
+void updateVirtualStressAngles();
+void runStressFullCommsLoad();
+void sendVirtualStressAnglePacket();
+void sendVirtualStressSpectroPacket();
+void sendVirtualStressPIDPacket();
 
 float getCachedAngle(int motorIndex);
 
@@ -338,9 +379,33 @@ void feedTaskWatchdog() {
     esp_task_wdt_reset();
 }
 
+bool isDetectorMotionActive() {
+    if (calCtx.state == CAL_RUNNING || pidTest.active) {
+        return true;
+    }
+    if (motorMutex == NULL) {
+        return true;
+    }
+    if (xSemaphoreTake(motorMutex, 0) != pdTRUE) {
+        return true;
+    }
+
+    bool active = false;
+    for (int i = 0; i < 4; i++) {
+        if ((motors[i].enabled && motors[i].stepInterval > 0) || motors[i].isPIDMode) {
+            active = true;
+            break;
+        }
+    }
+    xSemaphoreGive(motorMutex);
+    return active;
+}
+
 
 // --- Setup ---
 void setup() {
+    setCpuFrequencyMhz(160);
+
     pinMode(BOOT, OUTPUT);
     digitalWrite(BOOT, LOW);
 
@@ -377,18 +442,43 @@ void setup() {
 
     xTaskCreatePinnedToCore(TaskComms, "Comms", 8192, NULL, 2, &g_commsTaskHandle, 0);
     xTaskCreatePinnedToCore(TaskSensors, "Sensors", 4096, NULL, 1, &g_sensorsTaskHandle, 0);
+    xTaskCreatePinnedToCore(TaskStressCore0, "Stress0", 2048, NULL, 0, &g_stressCore0TaskHandle, 0);
+    xTaskCreatePinnedToCore(TaskStressCore1, "Stress1", 2048, NULL, 0, &g_stressCore1TaskHandle, 1);
 }
 
 // --- Loop (Core 1 - Motor Task) ---
 void loop() {
+    static unsigned long lastLoopUs = 0;
+    static bool wasMotorRunning = false;
+    bool motorRunning = true;
+
     if (xSemaphoreTake(motorMutex, 0) == pdTRUE) {
+        motorRunning = false;
         for(int i=0; i<4; i++) {
+            if (motors[i].enabled && motors[i].stepInterval > 0) {
+                motorRunning = true;
+            }
             stepMotor(motors[i], motorPins[i][0], motorPins[i][1], i);
         }
         xSemaphoreGive(motorMutex);
     }
+
+    unsigned long nowUs = micros();
+    if (lastLoopUs != 0 && motorRunning && wasMotorRunning) {
+        unsigned long gap = nowUs - lastLoopUs;
+        if (gap > g_maxActiveLoopGapUs) {
+            g_maxActiveLoopGapUs = gap;
+        }
+    }
+    lastLoopUs = nowUs;
+    wasMotorRunning = motorRunning;
+
     feedTaskWatchdog();
-    delayMicroseconds(5);
+    if (motorRunning) {
+        delayMicroseconds(5);
+    } else {
+        vTaskDelay(pdMS_TO_TICKS(2));
+    }
 }
 
 
@@ -422,6 +512,10 @@ void TaskComms(void *pvParameters) {
                     // ===== 新增：PID测试模式指令 =====
                     else if (inputBuffer.startsWith("PIDTEST:")) {
                         parsePIDTest(inputBuffer);
+                    }
+                    // ===== CPU 压力测试命令 =====
+                    else if (inputBuffer.startsWith("STRESS:")) {
+                        parseStressCommand(inputBuffer);
                     }
                     // ===== 新增：查询当前PID参数 =====
                     else if (inputBuffer == "PIDQUERY") {
@@ -622,6 +716,13 @@ void TaskComms(void *pvParameters) {
 
         if (millis() - g_lastHealthSendTime >= HEALTH_SEND_INTERVAL) {
             sendHealthPacket();
+            updateStressTest();
+            if (g_stressDonePending) {
+                Serial.printf("STRESS_DONE:mode=%s,duration_s=%lu\n", stressModeName(), g_stressDurationS);
+                g_stressDonePending = false;
+            } else if (g_stressActive) {
+                sendStressStatus();
+            }
             g_lastHealthSendTime = millis();
         }
 
@@ -671,8 +772,10 @@ void TaskComms(void *pvParameters) {
             sendAnglePacket();
         }
 
+        runStressFullCommsLoad();
+
         // ===== ADS122C04 分光数据轮询与发送（需要 I2C 互斥）=====
-        if (g_adsConfig.running && g_adsConfig.publishRate > 0) {
+        if (!isStressFullActive() && g_adsConfig.running && g_adsConfig.publishRate > 0) {
             unsigned long now = millis();
             unsigned long specInterval = 1000 / g_adsConfig.publishRate;
             if (now - g_lastSpectroPollTime >= specInterval) {
@@ -724,7 +827,7 @@ void TaskComms(void *pvParameters) {
         }
 
         feedTaskWatchdog();
-        vTaskDelay(COMMS_TASK_DELAY_MS / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(COMMS_TASK_DELAY_MS));
     }
 }
 
@@ -734,6 +837,13 @@ void TaskComms(void *pvParameters) {
 void TaskSensors(void *pvParameters) {
     registerCurrentTaskWatchdog();
     while (true) {
+        if (isStressFullActive()) {
+            updateVirtualStressAngles();
+            feedTaskWatchdog();
+            vTaskDelay(pdMS_TO_TICKS(SENSOR_TASK_DELAY_ACTIVE_MS));
+            continue;
+        }
+
         if (xSemaphoreTake(i2cMutex, 10 / portTICK_PERIOD_MS) == pdTRUE) {
             for (int i = 0; i < 4; i++) {
                 float a = readMt6701Angle(g_angleChannels[i]);
@@ -748,8 +858,309 @@ void TaskSensors(void *pvParameters) {
             xSemaphoreGive(i2cMutex);
         }
         feedTaskWatchdog();
-        vTaskDelay(SENSOR_TASK_DELAY_MS / portTICK_PERIOD_MS);
+        uint32_t delayMs = isDetectorMotionActive()
+            ? SENSOR_TASK_DELAY_ACTIVE_MS
+            : SENSOR_TASK_DELAY_IDLE_MS;
+        vTaskDelay(pdMS_TO_TICKS(delayMs));
     }
+}
+
+void TaskStressCore0(void *pvParameters) {
+    registerCurrentTaskWatchdog();
+    while (true) {
+        if (g_stressActive) {
+            runStressWorkerSlice(0);
+            feedTaskWatchdog();
+            vTaskDelay(1);
+        } else {
+            feedTaskWatchdog();
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+}
+
+void TaskStressCore1(void *pvParameters) {
+    registerCurrentTaskWatchdog();
+    while (true) {
+        if (g_stressActive) {
+            runStressWorkerSlice(1);
+            feedTaskWatchdog();
+            vTaskDelay(1);
+        } else {
+            feedTaskWatchdog();
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+}
+
+void runStressWorkerSlice(uint8_t workerId) {
+    uint32_t acc = 0xA5A50000UL ^ workerId ^ millis();
+    float mix = 1.0f + (float)workerId;
+    unsigned long startMs = millis();
+
+    while (g_stressActive && millis() - startMs < STRESS_BUSY_SLICE_MS) {
+        for (int i = 0; i < 128; i++) {
+            acc = acc * 1664525UL + 1013904223UL + workerId;
+            mix += (float)(acc & 0xFF) * 0.00013f;
+            mix *= 1.00001f;
+            if (mix > 1000.0f) {
+                mix *= 0.25f;
+            }
+        }
+    }
+
+    g_stressSinkU32 ^= acc;
+    g_stressSinkF += mix * 0.000001f;
+    if (g_stressSinkF > 1000.0f) {
+        g_stressSinkF = 0.0f;
+    }
+}
+
+const char* stressModeName() {
+    return g_stressMode == STRESS_MODE_FULL ? "FULL" : "CPU";
+}
+
+bool isStressFullActive() {
+    return g_stressActive && g_stressMode == STRESS_MODE_FULL;
+}
+
+void updateVirtualStressAngles() {
+    unsigned long now = millis();
+    float base = (float)(now % 360000UL) * 0.18f;
+    while (base >= 360.0f) {
+        base -= 360.0f;
+    }
+
+    for (int i = 0; i < 4; i++) {
+        float angle = base + (float)i * 73.0f + (float)((g_stressVirtualSampleCounter + i * 17UL) % 100UL) * 0.01f;
+        while (angle >= 360.0f) {
+            angle -= 360.0f;
+        }
+        g_cachedAngles[i] = angle;
+        g_angleValid[i] = true;
+    }
+
+    g_angleTimestamp = now;
+    g_stressVirtualSampleCounter++;
+}
+
+void sendVirtualStressAnglePacket() {
+    static float lastValid[4] = {0};
+    AngleDataPacket packet;
+
+    packet.head1 = PACKET_HEADER1;
+    packet.head2 = HEADER2_ANGLE;
+    for (int i = 0; i < 4; i++) {
+        if (g_angleValid[i]) {
+            packet.angles[i] = g_cachedAngles[i];
+            lastValid[i] = packet.angles[i];
+        } else {
+            packet.angles[i] = lastValid[i];
+        }
+    }
+
+    uint8_t* data = (uint8_t*)&packet.head2;
+    packet.checksum = 0;
+    for (int i = 0; i < 17; i++) {
+        packet.checksum ^= data[i];
+    }
+    packet.tail = PACKET_TAIL;
+
+    Serial.write((uint8_t*)&packet, sizeof(packet));
+}
+
+void sendVirtualStressSpectroPacket() {
+    unsigned long now = millis();
+    int32_t rawCode = (int32_t)((g_stressVirtualSampleCounter * 7919UL + now) % 200000UL) - 100000;
+    uint8_t status = SPECTRO_STATUS_VALID;
+
+    g_lastSpectroRawCode = rawCode;
+    g_lastSpectroVoltage = codeToVoltage(rawCode, 3.3f, 1.0f);
+    g_lastSpectroStatus = status;
+
+    SpectroDataPacket packet;
+    packet.head1 = PACKET_HEADER1;
+    packet.head2 = HEADER2_SPECTRO;
+    packet.timestamp_ms = now;
+    packet.tca_channel = g_spectroChannel;
+    packet.status = status;
+    packet.raw_code = rawCode;
+    packet.voltage = g_lastSpectroVoltage;
+
+    uint8_t* data = (uint8_t*)&packet.head2;
+    packet.checksum = 0;
+    int checksumLen = sizeof(SpectroDataPacket) - 3;
+    for (int i = 0; i < checksumLen; i++) {
+        packet.checksum ^= data[i];
+    }
+    packet.tail = PACKET_TAIL;
+
+    Serial.write((uint8_t*)&packet, sizeof(packet));
+}
+
+void sendVirtualStressPIDPacket() {
+    uint8_t motorIndex = g_stressVirtualPidMotor & 0x03;
+    g_stressVirtualPidMotor = (g_stressVirtualPidMotor + 1) & 0x03;
+
+    float actualAngle = g_angleValid[motorIndex] ? g_cachedAngles[motorIndex] : 0.0f;
+    float targetAngle = actualAngle + 15.0f + (float)motorIndex * 5.0f;
+    while (targetAngle >= 360.0f) {
+        targetAngle -= 360.0f;
+    }
+    float error = normalizeAngleError(targetAngle, actualAngle);
+    float pidOutput = fabs(error) * 0.2f + 1.0f;
+
+    PIDDataPacket packet;
+    packet.head1 = PACKET_HEADER1;
+    packet.head2 = HEADER2_PID;
+    packet.motor_id = motorIndex;
+    packet.timestamp = micros();
+    packet.target_angle = targetAngle;
+    packet.actual_angle = actualAngle;
+    packet.theo_angle = targetAngle;
+    packet.pid_out = pidOutput;
+    packet.error = error;
+
+    uint8_t* data = (uint8_t*)&packet.motor_id;
+    packet.checksum = 0;
+    for (int i = 0; i < 25; i++) {
+        packet.checksum ^= data[i];
+    }
+    packet.tail = PACKET_TAIL;
+
+    Serial.write((uint8_t*)&packet, sizeof(packet));
+}
+
+void runStressFullCommsLoad() {
+    if (!isStressFullActive()) {
+        return;
+    }
+
+    unsigned long now = millis();
+    if (now - g_stressLastVirtualAnglePacketMs >= ANGLE_SEND_INTERVAL) {
+        g_stressLastVirtualAnglePacketMs = now;
+        sendVirtualStressAnglePacket();
+    }
+    if (now - g_stressLastVirtualSpectroPacketMs >= 20) {
+        g_stressLastVirtualSpectroPacketMs = now;
+        sendVirtualStressSpectroPacket();
+    }
+    if (now - g_stressLastVirtualPIDPacketMs >= PID_PACKET_INTERVAL) {
+        g_stressLastVirtualPIDPacketMs = now;
+        sendVirtualStressPIDPacket();
+    }
+}
+
+void parseStressCommand(String cmd) {
+    if (cmd == "STRESS:STATUS?") {
+        updateStressTest();
+        if (g_stressDonePending) {
+            Serial.printf("STRESS_DONE:mode=%s,duration_s=%lu\n", stressModeName(), g_stressDurationS);
+            g_stressDonePending = false;
+        } else {
+            sendStressStatus();
+        }
+        return;
+    }
+
+    if (cmd == "STRESS:STOP") {
+        stopStressTest(false);
+        Serial.println("STRESS_OK:STOP");
+        return;
+    }
+
+    // Format: STRESS:START, STRESS:START:<seconds>, STRESS:START:<seconds>,FULL
+    if (cmd == "STRESS:START" || cmd.startsWith("STRESS:START:")) {
+        unsigned long durationS = STRESS_DEFAULT_DURATION_S;
+        StressMode mode = STRESS_MODE_CPU;
+
+        if (cmd.startsWith("STRESS:START:")) {
+            String params = cmd.substring(13);
+            if (params.length() == 0) {
+                Serial.println("STRESS_ERR:FORMAT");
+                return;
+            }
+
+            if (params.endsWith(",FULL")) {
+                mode = STRESS_MODE_FULL;
+                params = params.substring(0, params.length() - 5);
+            } else if (params == "FULL") {
+                mode = STRESS_MODE_FULL;
+                params = "";
+            }
+
+            if (params.length() > 0) {
+                for (int i = 0; i < params.length(); i++) {
+                    if (!isDigit(params[i])) {
+                        Serial.println("STRESS_ERR:FORMAT");
+                        return;
+                    }
+                }
+                durationS = params.toInt();
+            } else if (mode != STRESS_MODE_FULL) {
+                Serial.println("STRESS_ERR:FORMAT");
+                return;
+            }
+        }
+        if (durationS < 1 || durationS > STRESS_MAX_DURATION_S) {
+            Serial.println("STRESS_ERR:DURATION_RANGE");
+            return;
+        }
+        if (isDetectorMotionActive()) {
+            Serial.println("STRESS_ERR:BUSY_MOTION");
+            return;
+        }
+        startStressTest(durationS, mode);
+        Serial.printf("STRESS_OK:START,mode=%s,duration_s=%lu\n", stressModeName(), durationS);
+        return;
+    }
+
+    Serial.println("STRESS_ERR:FORMAT");
+}
+
+void startStressTest(unsigned long durationS, StressMode mode) {
+    g_stressMode = mode;
+    g_stressDurationS = durationS;
+    g_stressStartMs = millis();
+    g_stressLastVirtualAnglePacketMs = 0;
+    g_stressLastVirtualSpectroPacketMs = 0;
+    g_stressLastVirtualPIDPacketMs = 0;
+    g_stressVirtualPidMotor = 0;
+    g_stressVirtualSampleCounter = 0;
+    g_stressDonePending = false;
+    g_stressActive = true;
+}
+
+void stopStressTest(bool completed) {
+    if (g_stressActive) {
+        g_stressActive = false;
+        g_stressDonePending = completed;
+    } else if (!completed) {
+        g_stressDonePending = false;
+    }
+}
+
+void updateStressTest() {
+    if (!g_stressActive) {
+        return;
+    }
+    unsigned long elapsedMs = millis() - g_stressStartMs;
+    if (elapsedMs >= g_stressDurationS * 1000UL) {
+        stopStressTest(true);
+    }
+}
+
+void sendStressStatus() {
+    updateStressTest();
+    if (!g_stressActive) {
+        Serial.println("STRESS_STATUS:IDLE");
+        return;
+    }
+
+    unsigned long elapsedS = (millis() - g_stressStartMs) / 1000UL;
+    unsigned long remainingS = elapsedS >= g_stressDurationS ? 0 : g_stressDurationS - elapsedS;
+    Serial.printf("STRESS_STATUS:RUNNING,mode=%s,duration_s=%lu,elapsed_s=%lu,remaining_s=%lu\n",
+        stressModeName(), g_stressDurationS, elapsedS, remainingS);
 }
 
 
@@ -1284,6 +1695,11 @@ void sendHealthPacket() {
     packet.tail = PACKET_TAIL;
 
     Serial.write((uint8_t*)&packet, sizeof(packet));
+    unsigned long angleAgeMs = g_angleTimestamp == 0 ? 0 : millis() - g_angleTimestamp;
+    unsigned long activeLoopGapUs = g_maxActiveLoopGapUs;
+    g_maxActiveLoopGapUs = 0;
+    Serial.printf("LOOP_GAP_ACTIVE_MAX_US:%lu\n", activeLoopGapUs);
+    Serial.printf("ANGLE_AGE_MS:%lu\n", angleAgeMs);
 }
 
 void sendIdentity() {
