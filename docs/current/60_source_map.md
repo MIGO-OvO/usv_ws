@@ -75,3 +75,11 @@ Updated: 2026-06-03
 | 航点采样不继续 | `mode_auto.cpp` -> `USV_SMPL/USV_DONE` -> `mavlink_trigger_node.py` |
 | router/MAVROS 冲突 | `common_env.sh`、`usv_bringup.launch` |
 | 分光或健康数据无效 | `pump_control_node.py`、`DetFirmware/src/main.cpp`、Web Socket.IO payload |
+| 污染物浓度或热力图异常 | `web_config_server.py` -> `frontend/src/pages/Map.tsx` -> `tests/test_hardware_runtime_sync.py` |
+
+## 污染物地图边界
+
+- 污染物线性模型、校准元数据、点质量、GeoJSON/CSV 导出和 IDW 热力图 surface 的源码归属 `src/usv_ros`。
+- 不在 `ardupilot-usv/` 增加污染物浓度计算、历史记录或热力图逻辑；固件只处理 `USV_SMPL/USV_DONE` 和载荷遥测转发。
+- 不在 `DetFirmware/` 增加污染物浓度输出；检测装置固件保持分光原始量、电压、valid、基线和健康帧职责。
+- 第一阶段不在 `WQ-USV-QGroundControl/` 实现污染物热力图；QGC 只保留任务、命令和遥测展示边界。

@@ -105,6 +105,13 @@ Updated: 2026-06-03
 - 链路诊断、电台状态、bridge 诊断。
 - 系统健康：`GET /api/diagnostics/system`；Socket.IO 事件 `system_health`。
 
+## 污染物地图职责边界
+
+- 第一阶段污染物浓度计算、采样点质量标记、历史 GeoJSON、CSV 和 IDW 热力图 surface 均由 ROS/Web 承载：`src/usv_ros/scripts/web_config_server.py` 与 `src/usv_ros/frontend/`。
+- QGC 第一阶段不显示污染物热力图；QGC 继续承担任务规划、手动/走航采样命令、载荷遥测和采样数据页入口。
+- ArduPilot 只保留 mission script、`USV_SMPL/USV_DONE` 闭环和 `NAMED_VALUE_FLOAT` 载荷转发，不计算污染物浓度，不保存污染物历史数据，不生成热力图。
+- DetFirmware 只输出 raw code、电压、吸光度、valid、基线和健康状态，不输出污染物浓度。
+
 ## 检测装置串口协议
 
 | 项 | 当前值 |
