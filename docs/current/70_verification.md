@@ -67,6 +67,29 @@ Updated: 2026-06-03
 | Jetson 指标 | 查看 Web/ROS JSON | CPU、内存、温度、uptime 字段存在；无温度传感器时为 `null` |
 | ESP32 指标 | 查看 Web/ROS JSON | 串口健康帧在线时显示温度、heap、任务栈水位 |
 
+## 污染物地图离线验证
+
+| 项 | 方法 | 通过标准 |
+|---|---|---|
+| Web 浓度模型 | `python -m unittest tests.test_hardware_runtime_sync.HardwareRuntimeSyncTests.test_web_records_geo_sample_with_concentration_when_work_curve_enabled` | 数据点含污染物名称、单位、校准 ID、浓度和质量快照 |
+| Web 热力图 API | `python -m unittest tests.test_hardware_runtime_sync.HardwareRuntimeSyncTests.test_web_idw_surface_uses_valid_metric_points` | GeoJSON 与 surface 含 `meta`，IDW 只使用有效 GPS/分光/量程点 |
+| 走航门控 | `python -m unittest tests.test_mavlink_command_compat.MavlinkCommandCompatibilityTests.test_survey_gate_uses_wgs84_distance_from_last_successful_start` | WGS-84 距离不足时只发布 `survey_gate_skipped:distance_too_short` |
+| 职责边界 | `rg -n "污染物|热力图|浓度|QGC|ArduPilot|DetFirmware" docs/current src/usv_ros/README.md` | 文档明确：ROS/Web 负责污染物地图；QGC 第一阶段不做热力图；ArduPilot/DetFirmware 不计算浓度 |
+
+## 污染物地图现场取证
+
+第一阶段以 Web 为主，不在 QGC 绘制污染物热力图。现场验收必须把数据、截图和 MAVLink 闭环日志放到同一个 `mission_id` 证据目录。
+
+| 证据 | 获取方式 | 通过标准 |
+|---|---|---|
+| 任务原始数据 | `GET /api/data/mission/<mission_id>` | 含采样点、GPS、分光质量、污染物浓度与校准元数据 |
+| CSV | `GET /api/data/mission/<mission_id>/csv` | `csv_rows` 与任务有效记录数可对账 |
+| GeoJSON | `GET /api/data/mission/<mission_id>/geojson?metric=concentration&download=true` | feature 数等于 `valid_gps_points`，剔除原因可追溯 |
+| IDW surface | `GET /api/data/mission/<mission_id>/surface?metric=concentration&size=80&power=2&download=true` | `surface_grid`、`power`、有效点数和污染物单位写入 `meta` |
+| 实时快照 | `GET /api/map/live` | 包含当前 surface、轨迹、`survey_status` 与 `mapping_profile` |
+| 桌面截图 | Web 地图页 16:9 | 点位、热力图、图例、质量统计、走航门控状态均可见 |
+| MAVLink 日志 | `grep -E "USV_SMPL|USV_DONE|USV_SURV|survey_gate_skipped" usv_system.log` | 定点采样存在 `USV_SMPL/USV_DONE` 闭环；走航跳过只记录门控原因 |
+
 ## 现场验证记录模板
 
 | 时间 | 固件 commit | ROS commit | QGC commit | 场景 | 结果 | 备注 |
@@ -76,3 +99,18 @@ Updated: 2026-06-03
 |  |  |  |  | 走航采样 |  |  |
 |  |  |  |  | 分光基线 |  |  |
 |  |  |  |  | 电台链路 |  |  |
+
+污染物地图证据模板：
+
+| 字段 | 记录值 |
+|---|---|
+| `mission_id` |  |
+| `pollutant_name` / `unit` |  |
+| `calibration_id` / `work_curve_id` |  |
+| `sample_total` / `csv_rows` |  |
+| `valid_gps_points` / `excluded_points` |  |
+| `excluded_reasons` |  |
+| `surface_grid` / `idw_power` |  |
+| `survey_min_distance_m` / `last_gate_reason` |  |
+| `screenshot_path` |  |
+| `USV_SMPL/USV_DONE` 日志 |  |
