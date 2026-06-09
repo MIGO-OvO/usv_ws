@@ -25,6 +25,15 @@ def test_stress_tasks_are_pinned_to_both_cores_and_low_priority():
     assert "vTaskDelay(1)" in source
 
 
+def test_low_priority_stress_tasks_are_not_watched_by_task_wdt():
+    source = SOURCE.read_text(encoding="utf-8")
+
+    for function_name in ("TaskStressCore0", "TaskStressCore1"):
+        body = _function_body(source, function_name)
+        assert "registerCurrentTaskWatchdog" not in body
+        assert "feedTaskWatchdog" not in body
+
+
 def test_stress_start_has_motion_guard_and_fixed_responses():
     source = SOURCE.read_text(encoding="utf-8")
 

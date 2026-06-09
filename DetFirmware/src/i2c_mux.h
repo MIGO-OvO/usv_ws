@@ -13,6 +13,12 @@
 extern uint8_t g_angleChannels[4];   // X, Y, Z, A 角度源的 TCA 通道
 extern uint8_t g_spectroChannel;     // ADS122C04 所在的 TCA 通道
 
+enum I2CReadStatus {
+    I2C_READ_OK,
+    I2C_READ_MUX_ERROR,
+    I2C_READ_DEVICE_ERROR
+};
+
 // 缓存上次选中的通道，减少重复切换
 static uint8_t _lastSelectedChannel = 0xFF;
 
@@ -46,10 +52,17 @@ inline void invalidateTcaCache() {
  * @param channel TCA 通道号
  * @return 角度值 0~360，失败返回 -1
  */
-inline float readMt6701Angle(uint8_t channel) {
+inline float readMt6701AngleWithStatus(uint8_t channel, I2CReadStatus *status) {
+    if (status != NULL) {
+        *status = I2C_READ_DEVICE_ERROR;
+    }
+
     for (int retry = 0; retry < MAX_RETRIES; retry++) {
         // 选择通道
         if (!selectTcaChannel(channel)) {
+            if (status != NULL) {
+                *status = I2C_READ_MUX_ERROR;
+            }
             _lastSelectedChannel = 0xFF;
             delay(2);
             continue;
@@ -59,32 +72,75 @@ inline float readMt6701Angle(uint8_t channel) {
         // 读取高字节
         Wire.beginTransmission(MT6701_ADDR);
         Wire.write(0x03);
-        if (Wire.endTransmission(true) != 0) { delay(2); _lastSelectedChannel = 0xFF; continue; }
+        if (Wire.endTransmission(true) != 0) {
+            if (status != NULL) {
+                *status = I2C_READ_DEVICE_ERROR;
+            }
+            delay(2);
+            _lastSelectedChannel = 0xFF;
+            continue;
+        }
         delayMicroseconds(100);
 
         uint16_t highByte;
         if (Wire.requestFrom((uint16_t)MT6701_ADDR, (uint8_t)1, (bool)true) == 1) {
             highByte = Wire.read();
-        } else { delay(2); _lastSelectedChannel = 0xFF; continue; }
+        } else {
+            if (status != NULL) {
+                *status = I2C_READ_DEVICE_ERROR;
+            }
+            delay(2);
+            _lastSelectedChannel = 0xFF;
+            continue;
+        }
 
         // 读取低字节
         Wire.beginTransmission(MT6701_ADDR);
         Wire.write(0x04);
-        if (Wire.endTransmission(true) != 0) { delay(2); _lastSelectedChannel = 0xFF; continue; }
+        if (Wire.endTransmission(true) != 0) {
+            if (status != NULL) {
+                *status = I2C_READ_DEVICE_ERROR;
+            }
+            delay(2);
+            _lastSelectedChannel = 0xFF;
+            continue;
+        }
         delayMicroseconds(100);
 
         uint16_t lowByte;
         if (Wire.requestFrom((uint16_t)MT6701_ADDR, (uint8_t)1, (bool)true) == 1) {
             lowByte = Wire.read();
-        } else { delay(2); _lastSelectedChannel = 0xFF; continue; }
+        } else {
+            if (status != NULL) {
+                *status = I2C_READ_DEVICE_ERROR;
+            }
+            delay(2);
+            _lastSelectedChannel = 0xFF;
+            continue;
+        }
 
-        if (highByte == 0xFF && lowByte == 0xFF) { delay(2); continue; }
+        if (highByte == 0xFF && lowByte == 0xFF) {
+            if (status != NULL) {
+                *status = I2C_READ_DEVICE_ERROR;
+            }
+            delay(2);
+            continue;
+        }
 
         uint16_t raw = (highByte << 6) | (lowByte >> 2);
         float angle = (raw / 16384.0) * 360.0;
-        if (angle >= 0 && angle <= 360) return angle;
+        if (angle >= 0 && angle <= 360) {
+            if (status != NULL) {
+                *status = I2C_READ_OK;
+            }
+            return angle;
+        }
     }
     return -1.0;
+}
+
+inline float readMt6701Angle(uint8_t channel) {
+    return readMt6701AngleWithStatus(channel, NULL);
 }
 
 /**
@@ -142,4 +198,3 @@ inline void parseI2CMapCommand(String cmd) {
 }
 
 #endif // I2C_MUX_H
-

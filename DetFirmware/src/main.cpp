@@ -46,6 +46,9 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define STRESS_DEFAULT_DURATION_S 300UL
 #define STRESS_MAX_DURATION_S 1800UL
 #define STRESS_BUSY_SLICE_MS 40UL
+#define I2C_TRANSACTION_TIMEOUT_MS 15
+#define I2C_RECOVERY_FAILURE_THRESHOLD 8
+#define I2C_RECOVERY_MIN_INTERVAL_MS 5000UL
 
 #define MAX_OPEN_LOOP_RPM 20.0f
 #define MAX_COMMAND_DEGREES 3600.0f
@@ -67,6 +70,10 @@ TaskHandle_t g_stressCore1TaskHandle = NULL;
 unsigned long g_lastHealthSendTime = 0;
 const unsigned long HEALTH_SEND_INTERVAL = 1000;  // 1Hz
 volatile unsigned long g_maxActiveLoopGapUs = 0;
+volatile uint32_t g_i2cReadFailCount = 0;
+volatile uint32_t g_i2cRecoverCount = 0;
+uint8_t g_i2cConsecutiveFailureCount = 0;
+unsigned long g_lastI2CRecoverMs = 0;
 
 enum StressMode {
     STRESS_MODE_CPU,
@@ -189,6 +196,9 @@ uint8_t g_lastSpectroStatus = SPECTRO_STATUS_NOT_CONFIG;
 #define A_STP 33
 #define A_DIR 32
 #define BOOT 0
+#define I2C_SDA_PIN 21
+#define I2C_SCL_PIN 22
+#define I2C_CLOCK_HZ 100000
 
 // ============== 进样泵控制定�?==============
 #define PUMP_PIN 2              // 进样泵控制引�?(GPIO2)
@@ -326,6 +336,9 @@ void initTaskWatchdog();
 void registerCurrentTaskWatchdog();
 void feedTaskWatchdog();
 bool isDetectorMotionActive();
+void initI2CBus();
+void recoverI2CBus();
+void recordI2CBusFault(bool fault);
 void parseStressCommand(String cmd);
 void startStressTest(unsigned long durationS, StressMode mode);
 void stopStressTest(bool completed);
@@ -379,6 +392,64 @@ void feedTaskWatchdog() {
     esp_task_wdt_reset();
 }
 
+void initI2CBus() {
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
+    Wire.setClock(I2C_CLOCK_HZ);
+    Wire.setTimeOut(I2C_TRANSACTION_TIMEOUT_MS);
+    invalidateTcaCache();
+}
+
+void recoverI2CBus() {
+    g_i2cRecoverCount++;
+    feedTaskWatchdog();
+
+    Wire.end();
+    pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+    pinMode(I2C_SCL_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(I2C_SCL_PIN, HIGH);
+    delayMicroseconds(50);
+
+    for (int i = 0; i < 9; i++) {
+        digitalWrite(I2C_SCL_PIN, LOW);
+        delayMicroseconds(5);
+        digitalWrite(I2C_SCL_PIN, HIGH);
+        delayMicroseconds(5);
+    }
+
+    pinMode(I2C_SDA_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(I2C_SDA_PIN, LOW);
+    delayMicroseconds(5);
+    digitalWrite(I2C_SCL_PIN, HIGH);
+    delayMicroseconds(5);
+    digitalWrite(I2C_SDA_PIN, HIGH);
+    delayMicroseconds(5);
+
+    pinMode(I2C_SDA_PIN, INPUT_PULLUP);
+    initI2CBus();
+    Serial.printf("I2C_RECOVER:%lu\n", (unsigned long)g_i2cRecoverCount);
+    feedTaskWatchdog();
+}
+
+void recordI2CBusFault(bool fault) {
+    if (!fault) {
+        g_i2cConsecutiveFailureCount = 0;
+        return;
+    }
+
+    g_i2cReadFailCount++;
+    if (g_i2cConsecutiveFailureCount < 255) {
+        g_i2cConsecutiveFailureCount++;
+    }
+    if (g_i2cConsecutiveFailureCount >= I2C_RECOVERY_FAILURE_THRESHOLD) {
+        unsigned long now = millis();
+        if (g_lastI2CRecoverMs == 0 || now - g_lastI2CRecoverMs >= I2C_RECOVERY_MIN_INTERVAL_MS) {
+            g_i2cConsecutiveFailureCount = 0;
+            g_lastI2CRecoverMs = now;
+            recoverI2CBus();
+        }
+    }
+}
+
 bool isDetectorMotionActive() {
     if (calCtx.state == CAL_RUNNING || pidTest.active) {
         return true;
@@ -420,8 +491,7 @@ void setup() {
     ledcAttachPin(PUMP_PIN, PUMP_PWM_CHANNEL);
     ledcWrite(PUMP_PWM_CHANNEL, 0);  // 初始停止
 
-    Wire.begin(21, 22);
-    Wire.setClock(100000);
+    initI2CBus();
     Serial.begin(115200);
     delay(100);
 
@@ -782,8 +852,10 @@ void TaskComms(void *pvParameters) {
                 g_lastSpectroPollTime = now;
 
                 if (xSemaphoreTake(i2cMutex, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+                    bool spectroMuxOk = false;
                     invalidateTcaCache();
                     if (selectTcaChannel(g_adsConfig.tcaChannel)) {
+                        spectroMuxOk = true;
                         int32_t rawCode = 0;
                         if (adsReadData(g_adsConfig.address, &rawCode)) {
                             float voltage = codeToVoltage(rawCode, g_adsConfig.vrefValue, (float)g_adsConfig.gain);
@@ -821,6 +893,7 @@ void TaskComms(void *pvParameters) {
                         g_lastSpectroStatus = SPECTRO_STATUS_I2C_ERROR;
                     }
                     invalidateTcaCache();
+                    recordI2CBusFault(!spectroMuxOk);
                     xSemaphoreGive(i2cMutex);
                 }
             }
@@ -846,13 +919,17 @@ void TaskSensors(void *pvParameters) {
 
         if (xSemaphoreTake(i2cMutex, 10 / portTICK_PERIOD_MS) == pdTRUE) {
             for (int i = 0; i < 4; i++) {
-                float a = readMt6701Angle(g_angleChannels[i]);
-                if (a >= 0 && a <= 360) {
+                I2CReadStatus angleStatus = I2C_READ_DEVICE_ERROR;
+                float a = readMt6701AngleWithStatus(g_angleChannels[i], &angleStatus);
+                bool angleOk = (a >= 0 && a <= 360);
+                if (angleOk) {
                     g_cachedAngles[i] = a;
                     g_angleValid[i] = true;
                 } else {
                     g_angleValid[i] = false;
                 }
+                recordI2CBusFault(angleStatus == I2C_READ_MUX_ERROR);
+                feedTaskWatchdog();
             }
             g_angleTimestamp = millis();
             xSemaphoreGive(i2cMutex);
@@ -866,28 +943,22 @@ void TaskSensors(void *pvParameters) {
 }
 
 void TaskStressCore0(void *pvParameters) {
-    registerCurrentTaskWatchdog();
     while (true) {
         if (g_stressActive) {
             runStressWorkerSlice(0);
-            feedTaskWatchdog();
             vTaskDelay(1);
         } else {
-            feedTaskWatchdog();
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
 }
 
 void TaskStressCore1(void *pvParameters) {
-    registerCurrentTaskWatchdog();
     while (true) {
         if (g_stressActive) {
             runStressWorkerSlice(1);
-            feedTaskWatchdog();
             vTaskDelay(1);
         } else {
-            feedTaskWatchdog();
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
