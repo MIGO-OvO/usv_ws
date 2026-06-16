@@ -17,8 +17,13 @@
 
 # IDE / Tooling
 /.augment/
+/.omo/
+/.sisyphus/
 /.devcontainer/
 /.vscode/
 /.idea/
 Thumbs.db
 .DS_Store
+
+# 地图资源/离线瓦片包
+/usv_map_*.tar
