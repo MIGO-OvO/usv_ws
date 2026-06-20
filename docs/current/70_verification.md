@@ -1,6 +1,6 @@
 # 验证矩阵
 
-Updated: 2026-06-03
+Updated: 2026-06-19
 
 ## 静态验证
 
@@ -22,8 +22,24 @@ Updated: 2026-06-03
 | Python 语法 | `python3 -m py_compile src/usv_ros/scripts/*.py` | 无语法错误 |
 | Launch 参数 | `roslaunch usv_ros usv_bringup.launch --dump-params` | 参数可展开 |
 | 单元测试 | `python3 -m unittest discover -s src/usv_ros/tests -p 'test_*.py'` | 全部通过 |
+| lab_sim 库编译 | `python3 -m py_compile src/usv_ros/scripts/lib/lab_sim/*.py` | 无语法错误 |
 | 前端构建 | `cd src/usv_ros/frontend && npm run build` | 构建成功；产物写入 `static/dist` |
 | 系统健康节点 | `rostopic echo -n 1 /usv/system_health` | Jetson、detector、ROS 节点字段存在 |
+
+## 实验仿真 Schema v2 验证
+
+坐标真源、液滴事件粒度和科研导出的验收阈值与命令（在 `src/usv_ros` 目录执行）：
+
+| 项 | 命令 | 通过标准 |
+|---|---|---|
+| 坐标 round-trip | `python3 -m unittest tests.test_lab_sim_coordinates` | WGS-84 -> GCJ-02 -> WGS-84 桂林/上海/北京点地面误差 `<=0.5 m`；非法/非有限坐标拒绝 |
+| 图面对齐 | 浏览器 Lab/Map 页 | 点击点、保存后航点 marker、船位到点 marker 中心图面距离 `<=2 CSS px` |
+| schema v2 数据类 | `python3 -m unittest tests.test_lab_sim_models` | 默认值、边界、非法 schema、JSON round-trip 通过 |
+| 坐标迁移 | `python3 -m unittest tests.test_lab_coordinate_migration` | 裸 `{lat,lng}` 按 GCJ-02 迁移幂等，响应含 `wgs84`+`gcj02`，`missing_crs` 被拒 |
+| auto-scan API | `python3 -m unittest tests.test_lab_auto_scan_api` | 返回双坐标航点与 64 位 `water_snapshot_hash`，`preview=true` 不保存 |
+| 液滴事件粒度 | `python3 -m unittest tests.test_lab_sampling_event_storage` | 1 事件=1 写入=1 `data_point`（携带 `sample_event_id`/`droplet_count`）；100 事件 => 100 点 + 100 次写入 |
+| 校准互逆 | `python3 -m unittest tests.test_lab_sim_calibration` | Beer-Lambert/工作曲线互逆误差达标；零斜率/无效电压返回 typed error |
+| 科研 surface/图件 | `python3 -m unittest tests.test_lab_surface_export` | 六层 surface polygon 外严格 mask；导出 PNG/TIFF/SVG/PDF + metadata，DPI 与像素尺寸正确 |
 
 ## MAVLink 联调
 
