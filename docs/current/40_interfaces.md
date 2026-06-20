@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-06-03
+Updated: 2026-06-19
 
 ## ROS Launch
 
@@ -29,7 +29,11 @@ Updated: 2026-06-03
 | `/usv/pump_command` | `String` | trigger/Web -> pump | 下发检测装置文本命令 |
 | `/usv/pump_status` | `String` | pump -> Web/trigger | 泵控和自动化状态 |
 | `/usv/pump_angles` | `String` | pump -> bridge/Web | X/Y/Z/A 角度 |
-| `/usv/spectrometer_voltage` | `String` | pump -> bridge/Web | 电压、吸光度、基线、有效位 |
+| `/usv/spectrometer_voltage` | `String` | pump/trigger -> bridge/Web | 电压、吸光度、基线、有效位；实验模拟下由 trigger 发布液滴事件聚合值 |
+| `/usv/lab_sim/sample_event` | `String(JSON)` | trigger -> Web | 实验定点采样液滴事件明细：`event_id`、`mode`、`droplets[]`、`mean`、`valid_count`、`quality_flags` |
+| `/usv/lab_sim/command` | `String(JSON)` | Web -> lab_sim | 实验仿真控制：`config`、`start`、`stop`、`waypoints` |
+| `/usv/lab_sim/status` | `String(JSON)` | lab_sim -> Web | 虚拟船位、航向、运行状态（latched） |
+| `/usv/lab_sim/waypoint_reached` | `String(JSON)` | lab_sim -> trigger | 虚拟航点到达事件，不污染 `/mavros/mission/reached` |
 | `/usv/detector_health` | `String(JSON)` | pump -> system/Web | ESP32 温度、heap、任务栈水位等 |
 | `/usv/system_health` | `String(JSON)` | system -> Web/bridge | Jetson、ESP32、ROS 节点聚合健康状态 |
 | `/usv/bridge_diagnostics` | `String` | bridge -> Web | router bridge 诊断 |
@@ -100,10 +104,22 @@ Updated: 2026-06-03
 - 分光基线设置与电压/吸光度实时推送。
 - 数据中心跟随 `sampling_started` 自动建档，跟随 `sampling_stopped` / `survey_stopped` 停止记录。
 - 航点采样配置 CRUD。
-- 实验模式地图航点：`GET/POST/DELETE /api/lab/route`，用于读取、保存、清空 Web 点击生成的实验航线。
+- 实验模式 Lab：`GET/POST /api/lab/config`、`POST /api/lab/start`、`POST /api/lab/stop`、`GET /api/lab/status`、`GET/POST /api/lab/water-area`、`POST /api/lab/mission`、`POST /api/lab/route/auto-scan`、`POST /api/lab/mission/import-qgc`。
+- 污染物 surface：`GET /api/data/mission/<id>/surface`、`GET /api/map/live/surface`，支持 `metric`、`size`、`power`、`include_lab`、`download`。
 - 日志列表、日志读取、日志下载。
 - 链路诊断、电台状态、bridge 诊断。
 - 系统健康：`GET /api/diagnostics/system`；Socket.IO 事件 `system_health`。
+
+## 坐标 Schema v2
+
+实验模式坐标统一使用 schema v2 双坐标对，源码：`src/usv_ros/scripts/lib/lab_sim/coordinates.py`、`src/usv_ros/scripts/web_config_server.py`。
+
+- 实体结构：`{"coordinate_schema_version": 2, "wgs84": {lat,lng,alt?}, "gcj02": {lat,lng,alt?}}`。
+- WGS-84 是计算、持久化、航行、距离、ENU、污染场和 surface 的唯一真源；GCJ-02 仅用于高德底图显示。
+- Web 点击事件 `event.latlng` 标记 `input_crs=GCJ02` 提交；后端按迭代式 GCJ-02 -> WGS-84 反算得到真源，响应同时返回 `wgs84` 与 `gcj02`。
+- QGC 导入读取航点的 `wgs84`；`POST /api/lab/route/auto-scan` 返回双坐标航点与 `water_snapshot_hash`，`preview=true` 只生成不保存。
+- 旧版裸 `{lat,lng}` 配置按 GCJ-02 迁移到 schema v2，迁移幂等。
+- 旧实验航线接口 `/api/lab/route` 已废弃，由上述 `/api/lab/*` 接口取代。
 
 ## 污染物地图职责边界
 
@@ -111,6 +127,15 @@ Updated: 2026-06-03
 - QGC 第一阶段不显示污染物热力图；QGC 继续承担任务规划、手动/走航采样命令、载荷遥测和采样数据页入口。
 - ArduPilot 只保留 mission script、`USV_SMPL/USV_DONE` 闭环和 `NAMED_VALUE_FLOAT` 载荷转发，不计算污染物浓度，不保存污染物历史数据，不生成热力图。
 - DetFirmware 只输出 raw code、电压、吸光度、valid、基线和健康状态，不输出污染物浓度。
+
+## 实验仿真液滴事件与科研导出
+
+源码：`src/usv_ros/scripts/lib/lab_sim/`、`src/usv_ros/scripts/mavlink_trigger_node.py`、`src/usv_ros/scripts/web_config_server.py`。
+
+- 模拟数据源下，每个定点采样生成一个有界液滴事件（`droplet_count` 截断到 `3..64`，默认 12）。事件聚合为一条记录：`/usv/lab_sim/sample_event` 发布 `droplets[]` 明细，`/usv/spectrometer_voltage` 发布聚合电压、吸光度、浓度。
+- 持久化粒度：一个事件 = 一次写入 = 一个 `data_point`；`data_point` 携带 `sample_event_id` 与 `droplet_count`。`data_points` 数量等于事件数，不等于液滴数。
+- 科研 surface 在版本化水域快照的 ENU 网格上生成 truth/reconstruction/error/voltage/absorbance/risk 六层，polygon 外严格 mask；`figure_export.export_surface_figure()` 导出 300 DPI PNG/TIFF、SVG/PDF 和 metadata（DPI 限 72..1200，尺寸 0.1..20 inch）。
+- 这些计算只在 ROS/Web 承载；ArduPilot、DetFirmware、QGC 不参与液滴生成、surface 计算或科研绘图。
 
 ## 检测装置串口协议
 
