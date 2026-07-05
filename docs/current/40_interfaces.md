@@ -30,6 +30,7 @@ Updated: 2026-06-19
 | `/usv/pump_status` | `String` | pump -> Web/trigger | 泵控和自动化状态 |
 | `/usv/pump_angles` | `String` | pump -> bridge/Web | X/Y/Z/A 角度 |
 | `/usv/spectrometer_voltage` | `String` | pump/trigger -> bridge/Web | 电压、吸光度、基线、有效位；实验模拟下由 trigger 发布液滴事件聚合值 |
+| `/usv/spectrometer_raw` | `String(JSON)` | pump -> Web | 原始分光帧；Web 在采样窗口打开期间写入 `data/missions/raw/<mission_id>/<sample_id>.jsonl` |
 | `/usv/lab_sim/sample_event` | `String(JSON)` | trigger -> Web | 实验定点采样液滴事件明细：`event_id`、`mode`、`droplets[]`、`mean`、`valid_count`、`quality_flags` |
 | `/usv/lab_sim/command` | `String(JSON)` | Web -> lab_sim | 实验仿真控制：`config`、`start`、`stop`、`waypoints` |
 | `/usv/lab_sim/status` | `String(JSON)` | lab_sim -> Web | 虚拟船位、航向、运行状态（latched） |
@@ -103,7 +104,9 @@ Updated: 2026-06-19
 - 自动化启动/暂停/恢复/停止。
 - 分光基线设置与电压/吸光度实时推送。
 - 数据中心跟随 `sampling_started` 自动建档，跟随 `sampling_stopped` / `survey_stopped` 停止记录。
+- 数据中心按 `sampling_started` -> `sampling_stopped` 生成 `sample_windows[]`；raw frame 不写入 mission JSON，只保存相对路径与摘要。
 - 航点采样配置 CRUD。
+- 采样窗口 API：`GET /api/data/mission/<id>/samples`、`GET /api/data/mission/<id>/sample/<sample_id>`、`GET /api/data/mission/<id>/sample/<sample_id>/raw?limit=2000&offset=0`、`POST /api/data/mission/<id>/sample/<sample_id>/manual-result`。
 - 实验模式 Lab：`GET/POST /api/lab/config`、`POST /api/lab/start`、`POST /api/lab/stop`、`GET /api/lab/status`、`GET/POST /api/lab/water-area`、`POST /api/lab/mission`、`POST /api/lab/route/auto-scan`、`POST /api/lab/mission/import-qgc`。
 - 污染物 surface：`GET /api/data/mission/<id>/surface`、`GET /api/map/live/surface`，支持 `metric`、`size`、`power`、`include_lab`、`download`。
 - 日志列表、日志读取、日志下载。
