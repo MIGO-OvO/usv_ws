@@ -41,6 +41,8 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define COMMS_TASK_DELAY_MS 5
 #define SENSOR_TASK_DELAY_ACTIVE_MS 5
 #define SENSOR_TASK_DELAY_IDLE_MS 20
+#define SENSOR_TASK_DELAY_SPECTRO_MS 15
+#define I2C_SPECTRO_TAKE_TIMEOUT_MS 15
 #define MAX_COMMAND_LENGTH 160
 #define TASK_WDT_TIMEOUT_SEC 5
 #define STRESS_DEFAULT_DURATION_S 300UL
@@ -56,7 +58,7 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 // ============== 传感器缓存 ==============
 volatile float g_cachedAngles[4] = {0, 0, 0, 0};
 volatile bool  g_angleValid[4]   = {false, false, false, false};
-volatile unsigned long g_angleTimestamp = 0;
+volatile uint32_t g_angleTimestampMs[4] = {0, 0, 0, 0};
 SemaphoreHandle_t i2cMutex;
 
 bool g_angleStreamActive = false;
@@ -72,6 +74,9 @@ const unsigned long HEALTH_SEND_INTERVAL = 1000;  // 1Hz
 volatile unsigned long g_maxActiveLoopGapUs = 0;
 volatile uint32_t g_i2cReadFailCount = 0;
 volatile uint32_t g_i2cRecoverCount = 0;
+volatile uint32_t g_spectroSuccessCount = 0;
+volatile uint32_t g_spectroMutexTimeoutCount = 0;
+volatile uint32_t g_spectroI2CErrorCount = 0;
 uint8_t g_i2cConsecutiveFailureCount = 0;
 unsigned long g_lastI2CRecoverMs = 0;
 
@@ -181,7 +186,8 @@ uint8_t g_spectroChannel = 2;
 
 // ============== ADS122C04 全局状�?==============
 ADSConfig g_adsConfig;
-unsigned long g_lastSpectroPollTime = 0;
+volatile bool g_spectroRunning = false;
+uint32_t g_nextSpectroDueMs = 0;
 int32_t g_lastSpectroRawCode = 0;
 float g_lastSpectroVoltage = 0.0f;
 uint8_t g_lastSpectroStatus = SPECTRO_STATUS_NOT_CONFIG;
@@ -678,14 +684,17 @@ void TaskComms(void *pvParameters) {
                             invalidateTcaCache();
                             if (selectTcaChannel(g_adsConfig.tcaChannel)) {
                                 if (adsInitAndStart(g_adsConfig)) {
-                                    g_lastSpectroPollTime = millis();
+                                    g_spectroRunning = true;
+                                    g_nextSpectroDueMs = millis() + (1000UL / g_adsConfig.publishRate);
                                     g_lastSpectroStatus = 0;
                                     Serial.println("ADS_OK:START");
                                 } else {
                                     g_adsConfig.running = false;
+                                    g_spectroRunning = false;
                                     Serial.println("ADS_ERR:I2C");
                                 }
                             } else {
+                                g_spectroRunning = false;
                                 Serial.println("ADS_ERR:I2C");
                             }
                             invalidateTcaCache();
@@ -693,11 +702,12 @@ void TaskComms(void *pvParameters) {
                     }
                     else if (inputBuffer == "ADSSTOP") {
                         adsStop(g_adsConfig);
+                        g_spectroRunning = false;
                         Serial.println("ADS_OK:STOP");
                     }
                     else if (inputBuffer == "ADSSTATUS?") {
                         Serial.printf("ADS_STATUS:%s,CH=%d,ADDR=0x%02X,DR=%d,GAIN=%d,REF=%s\n",
-                            g_adsConfig.running ? "RUNNING" : "STOPPED",
+                            g_spectroRunning ? "RUNNING" : "STOPPED",
                             g_adsConfig.tcaChannel, g_adsConfig.address, g_adsConfig.adcRate,
                             g_adsConfig.gain, g_adsConfig.vrefMode == ADS_VREF_AVDD ? "AVDD" : "INT");
                     }
@@ -845,19 +855,22 @@ void TaskComms(void *pvParameters) {
         runStressFullCommsLoad();
 
         // ===== ADS122C04 分光数据轮询与发送（需要 I2C 互斥）=====
-        if (!isStressFullActive() && g_adsConfig.running && g_adsConfig.publishRate > 0) {
-            unsigned long now = millis();
-            unsigned long specInterval = 1000 / g_adsConfig.publishRate;
-            if (now - g_lastSpectroPollTime >= specInterval) {
-                g_lastSpectroPollTime = now;
-
-                if (xSemaphoreTake(i2cMutex, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+        if (!isStressFullActive() && g_spectroRunning && g_adsConfig.publishRate > 0) {
+            uint32_t now = millis();
+            uint32_t specInterval = 1000UL / g_adsConfig.publishRate;
+            if ((int32_t)(now - g_nextSpectroDueMs) >= 0) {
+                if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(I2C_SPECTRO_TAKE_TIMEOUT_MS)) == pdTRUE) {
                     bool spectroMuxOk = false;
+                    bool spectroReadOk = false;
+                    int32_t spectroRawCode = 0;
+                    float spectroVoltage = 0.0f;
+                    uint8_t spectroStatus = 0;
                     invalidateTcaCache();
                     if (selectTcaChannel(g_adsConfig.tcaChannel)) {
                         spectroMuxOk = true;
                         int32_t rawCode = 0;
                         if (adsReadData(g_adsConfig.address, &rawCode)) {
+                            spectroReadOk = true;
                             float voltage = codeToVoltage(rawCode, g_adsConfig.vrefValue, (float)g_adsConfig.gain);
                             g_lastSpectroRawCode = rawCode;
                             g_lastSpectroVoltage = voltage;
@@ -867,34 +880,43 @@ void TaskComms(void *pvParameters) {
                                 status |= SPECTRO_STATUS_SATURATED;
                             }
                             g_lastSpectroStatus = status;
-
-                            SpectroDataPacket pkt;
-                            pkt.head1 = PACKET_HEADER1;
-                            pkt.head2 = HEADER2_SPECTRO;
-                            pkt.timestamp_ms = now;
-                            pkt.tca_channel = g_adsConfig.tcaChannel;
-                            pkt.status = status;
-                            pkt.raw_code = rawCode;
-                            pkt.voltage = voltage;
-
-                            uint8_t* pktData = (uint8_t*)&pkt.head2;
-                            pkt.checksum = 0;
-                            int checksumLen = sizeof(SpectroDataPacket) - 3;
-                            for (int ci = 0; ci < checksumLen; ci++) {
-                                pkt.checksum ^= pktData[ci];
-                            }
-                            pkt.tail = PACKET_TAIL;
-
-                            Serial.write((uint8_t*)&pkt, sizeof(pkt));
+                            spectroRawCode = rawCode;
+                            spectroVoltage = voltage;
+                            spectroStatus = status;
                         } else {
                             g_lastSpectroStatus = SPECTRO_STATUS_I2C_ERROR;
+                            g_spectroI2CErrorCount++;
                         }
                     } else {
                         g_lastSpectroStatus = SPECTRO_STATUS_I2C_ERROR;
+                        g_spectroI2CErrorCount++;
                     }
                     invalidateTcaCache();
                     recordI2CBusFault(!spectroMuxOk);
                     xSemaphoreGive(i2cMutex);
+                    if (spectroReadOk) {
+                        SpectroDataPacket pkt;
+                        pkt.head1 = PACKET_HEADER1;
+                        pkt.head2 = HEADER2_SPECTRO;
+                        pkt.timestamp_ms = now;
+                        pkt.tca_channel = g_adsConfig.tcaChannel;
+                        pkt.status = spectroStatus;
+                        pkt.raw_code = spectroRawCode;
+                        pkt.voltage = spectroVoltage;
+                        uint8_t* pktData = (uint8_t*)&pkt.head2;
+                        pkt.checksum = 0;
+                        for (int ci = 0; ci < (int)sizeof(SpectroDataPacket) - 3; ci++) {
+                            pkt.checksum ^= pktData[ci];
+                        }
+                        pkt.tail = PACKET_TAIL;
+                        Serial.write((uint8_t*)&pkt, sizeof(pkt));
+                        g_spectroSuccessCount++;
+                        do {
+                            g_nextSpectroDueMs += specInterval;
+                        } while ((int32_t)(now - g_nextSpectroDueMs) >= 0);
+                    }
+                } else {
+                    g_spectroMutexTimeoutCount++;
                 }
             }
         }
@@ -909,6 +931,7 @@ void TaskComms(void *pvParameters) {
 // 与 TaskComms 通过 i2cMutex 共享 I2C 总线，互不阻塞串口命令。
 void TaskSensors(void *pvParameters) {
     registerCurrentTaskWatchdog();
+    uint8_t nextAngleIndex = 0;
     while (true) {
         if (isStressFullActive()) {
             updateVirtualStressAngles();
@@ -918,26 +941,37 @@ void TaskSensors(void *pvParameters) {
         }
 
         if (xSemaphoreTake(i2cMutex, 10 / portTICK_PERIOD_MS) == pdTRUE) {
-            for (int i = 0; i < 4; i++) {
+            uint8_t anglesPerCycle = g_spectroRunning ? 1 : 4;
+            uint8_t startIndex = g_spectroRunning ? nextAngleIndex : 0;
+            for (uint8_t offset = 0; offset < anglesPerCycle; offset++) {
+                uint8_t i = (startIndex + offset) % 4;
                 I2CReadStatus angleStatus = I2C_READ_DEVICE_ERROR;
                 float a = readMt6701AngleWithStatus(g_angleChannels[i], &angleStatus);
                 bool angleOk = (a >= 0 && a <= 360);
                 if (angleOk) {
                     g_cachedAngles[i] = a;
                     g_angleValid[i] = true;
+                    g_angleTimestampMs[i] = millis();
                 } else {
                     g_angleValid[i] = false;
                 }
                 recordI2CBusFault(angleStatus == I2C_READ_MUX_ERROR);
                 feedTaskWatchdog();
             }
-            g_angleTimestamp = millis();
+            if (g_spectroRunning) {
+                nextAngleIndex = (nextAngleIndex + anglesPerCycle) % 4;
+            } else {
+                nextAngleIndex = 0;
+            }
             xSemaphoreGive(i2cMutex);
         }
         feedTaskWatchdog();
         uint32_t delayMs = isDetectorMotionActive()
             ? SENSOR_TASK_DELAY_ACTIVE_MS
             : SENSOR_TASK_DELAY_IDLE_MS;
+        if (g_spectroRunning && delayMs < SENSOR_TASK_DELAY_SPECTRO_MS) {
+            delayMs = SENSOR_TASK_DELAY_SPECTRO_MS;
+        }
         vTaskDelay(pdMS_TO_TICKS(delayMs));
     }
 }
@@ -1009,9 +1043,8 @@ void updateVirtualStressAngles() {
         }
         g_cachedAngles[i] = angle;
         g_angleValid[i] = true;
+        g_angleTimestampMs[i] = now;
     }
-
-    g_angleTimestamp = now;
     g_stressVirtualSampleCounter++;
 }
 
@@ -1766,11 +1799,24 @@ void sendHealthPacket() {
     packet.tail = PACKET_TAIL;
 
     Serial.write((uint8_t*)&packet, sizeof(packet));
-    unsigned long angleAgeMs = g_angleTimestamp == 0 ? 0 : millis() - g_angleTimestamp;
+    unsigned long angleAgeMs[4] = {0, 0, 0, 0};
+    unsigned long oldestAngleAgeMs = 0;
+    for (uint8_t i = 0; i < 4; i++) {
+        if (g_angleValid[i] && g_angleTimestampMs[i] != 0) {
+            angleAgeMs[i] = packet.timestamp_ms - g_angleTimestampMs[i];
+            if (angleAgeMs[i] > oldestAngleAgeMs) oldestAngleAgeMs = angleAgeMs[i];
+        }
+    }
     unsigned long activeLoopGapUs = g_maxActiveLoopGapUs;
     g_maxActiveLoopGapUs = 0;
     Serial.printf("LOOP_GAP_ACTIVE_MAX_US:%lu\n", activeLoopGapUs);
-    Serial.printf("ANGLE_AGE_MS:%lu\n", angleAgeMs);
+    Serial.printf("ANGLE_AGE_MS:%lu\n", oldestAngleAgeMs);
+    Serial.printf("ANGLE_AGE_CH_MS:%lu,%lu,%lu,%lu\n",
+        angleAgeMs[0], angleAgeMs[1], angleAgeMs[2], angleAgeMs[3]);
+    Serial.printf("ADS_HEALTH:SUCCESS=%lu,MUTEX_TIMEOUT=%lu,I2C_ERROR=%lu\n",
+        (unsigned long)g_spectroSuccessCount,
+        (unsigned long)g_spectroMutexTimeoutCount,
+        (unsigned long)g_spectroI2CErrorCount);
 }
 
 void sendIdentity() {

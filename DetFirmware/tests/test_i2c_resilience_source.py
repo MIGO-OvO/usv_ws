@@ -27,6 +27,39 @@ def test_sensor_task_feeds_watchdog_per_angle_channel_without_recovering_on_devi
     assert "recordI2CReadResult(angleOk)" not in body
 
 
+def test_ads_sampling_gets_i2c_priority_over_angle_refresh():
+    source = SOURCE.read_text(encoding="utf-8")
+    body = _function_body(source, "TaskSensors")
+
+    assert "anglesPerCycle" in body
+    assert "SENSOR_TASK_DELAY_SPECTRO_MS" in source
+    assert "I2C_SPECTRO_TAKE_TIMEOUT_MS" in source
+    assert "g_spectroRunning" in body
+
+
+def test_ads_deadline_retries_mutex_timeout_without_consuming_period():
+    source = SOURCE.read_text(encoding="utf-8")
+    body = _function_body(source, "TaskComms")
+
+    assert "(int32_t)(now - g_nextSpectroDueMs) >= 0" in body
+    assert "g_spectroMutexTimeoutCount++" in body
+    assert "g_nextSpectroDueMs += specInterval" in body
+    assert body.index("g_nextSpectroDueMs += specInterval") > body.index("if (spectroReadOk)")
+    read_index = body.index("bool spectroReadOk")
+    assert body.index("xSemaphoreGive(i2cMutex)", read_index) < body.index("Serial.write", read_index)
+
+
+def test_angle_freshness_tracks_each_channel_and_reports_oldest_age():
+    source = SOURCE.read_text(encoding="utf-8")
+    sensor_body = _function_body(source, "TaskSensors")
+    health_body = _function_body(source, "sendHealthPacket")
+
+    assert "g_angleTimestampMs[i] = millis()" in sensor_body
+    assert "oldestAngleAgeMs" in health_body
+    assert "ANGLE_AGE_CH_MS:" in health_body
+    assert "ADS_HEALTH:" in health_body
+
+
 def test_angle_reader_distinguishes_mux_failure_from_device_read_failure():
     source = I2C_MUX.read_text(encoding="utf-8")
 
