@@ -4,6 +4,7 @@
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <esp_task_wdt.h>
+#include <math.h>
 
 // 新增模块头文�?
 #include "i2c_mux.h"
@@ -37,7 +38,7 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define PID_PACKET_INTERVAL 20  // 50Hz 数据包发送间�?
 
 #define DET_FIRMWARE_ID "USV_DETECTOR"
-#define DET_FIRMWARE_VERSION "2026.04.25"
+#define DET_FIRMWARE_VERSION "2026.07.24"
 #define COMMS_TASK_DELAY_MS 5
 #define SENSOR_TASK_DELAY_ACTIVE_MS 5
 #define SENSOR_TASK_DELAY_IDLE_MS 20
@@ -51,6 +52,10 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define I2C_TRANSACTION_TIMEOUT_MS 15
 #define I2C_RECOVERY_FAILURE_THRESHOLD 8
 #define I2C_RECOVERY_MIN_INTERVAL_MS 5000UL
+
+// 抑制 ADC 单点瞬态：大于阈值的跳变需要下一点在容差内重复确认。
+#define SPECTRO_TRANSIENT_THRESHOLD_V 0.020f
+#define SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V 0.010f
 
 #define MAX_OPEN_LOOP_RPM 20.0f
 #define MAX_COMMAND_DEGREES 3600.0f
@@ -77,6 +82,9 @@ volatile uint32_t g_i2cRecoverCount = 0;
 volatile uint32_t g_spectroSuccessCount = 0;
 volatile uint32_t g_spectroMutexTimeoutCount = 0;
 volatile uint32_t g_spectroI2CErrorCount = 0;
+volatile uint32_t g_spectroCrcErrorCount = 0;
+volatile uint32_t g_spectroDuplicateCount = 0;
+volatile uint32_t g_spectroTransientDropCount = 0;
 uint8_t g_i2cConsecutiveFailureCount = 0;
 unsigned long g_lastI2CRecoverMs = 0;
 
@@ -191,6 +199,12 @@ uint32_t g_nextSpectroDueMs = 0;
 int32_t g_lastSpectroRawCode = 0;
 float g_lastSpectroVoltage = 0.0f;
 uint8_t g_lastSpectroStatus = SPECTRO_STATUS_NOT_CONFIG;
+bool g_spectroCounterValid = false;
+uint8_t g_lastSpectroConversionCounter = 0;
+bool g_spectroAcceptedSampleValid = false;
+float g_spectroAcceptedVoltage = 0.0f;
+bool g_spectroTransientPending = false;
+float g_spectroPendingVoltage = 0.0f;
 
 // --- 引脚定义 ---
 #define X_STP 13
@@ -456,6 +470,50 @@ void recordI2CBusFault(bool fault) {
     }
 }
 
+void resetSpectroSamplingIntegrity() {
+    g_spectroCounterValid = false;
+    g_lastSpectroConversionCounter = 0;
+    g_spectroAcceptedSampleValid = false;
+    g_spectroAcceptedVoltage = 0.0f;
+    g_spectroTransientPending = false;
+    g_spectroPendingVoltage = 0.0f;
+}
+
+bool acceptSpectroSample(float voltage, bool *spectroTransient) {
+    *spectroTransient = false;
+    if (!g_spectroAcceptedSampleValid) {
+        g_spectroAcceptedSampleValid = true;
+        g_spectroAcceptedVoltage = voltage;
+        g_spectroTransientPending = false;
+        return true;
+    }
+
+    if (fabsf(voltage - g_spectroAcceptedVoltage) <= SPECTRO_TRANSIENT_THRESHOLD_V) {
+        g_spectroAcceptedVoltage = voltage;
+        g_spectroTransientPending = false;
+        return true;
+    }
+
+    if (g_spectroTransientPending
+        && fabsf(voltage - g_spectroPendingVoltage) <= SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V) {
+        g_spectroAcceptedVoltage = voltage;
+        g_spectroTransientPending = false;
+        return true;
+    }
+
+    g_spectroPendingVoltage = voltage;
+    g_spectroTransientPending = true;
+    *spectroTransient = true;
+    return false;
+}
+
+void advanceSpectroDeadline(uint32_t now, uint32_t intervalMs) {
+    if (intervalMs == 0) intervalMs = 1;
+    do {
+        g_nextSpectroDueMs += intervalMs;
+    } while ((int32_t)(now - g_nextSpectroDueMs) >= 0);
+}
+
 bool isDetectorMotionActive() {
     if (calCtx.state == CAL_RUNNING || pidTest.active) {
         return true;
@@ -687,6 +745,7 @@ void TaskComms(void *pvParameters) {
                                     g_spectroRunning = true;
                                     g_nextSpectroDueMs = millis() + (1000UL / g_adsConfig.publishRate);
                                     g_lastSpectroStatus = 0;
+                                    resetSpectroSamplingIntegrity();
                                     Serial.println("ADS_OK:START");
                                 } else {
                                     g_adsConfig.running = false;
@@ -861,7 +920,8 @@ void TaskComms(void *pvParameters) {
             if ((int32_t)(now - g_nextSpectroDueMs) >= 0) {
                 if (xSemaphoreTake(i2cMutex, pdMS_TO_TICKS(I2C_SPECTRO_TAKE_TIMEOUT_MS)) == pdTRUE) {
                     bool spectroMuxOk = false;
-                    bool spectroReadOk = false;
+                    bool spectroPublishOk = false;
+                    ADSReadStatus spectroReadStatus = ADS_READ_I2C_ERROR;
                     int32_t spectroRawCode = 0;
                     float spectroVoltage = 0.0f;
                     uint8_t spectroStatus = 0;
@@ -869,32 +929,62 @@ void TaskComms(void *pvParameters) {
                     if (selectTcaChannel(g_adsConfig.tcaChannel)) {
                         spectroMuxOk = true;
                         int32_t rawCode = 0;
-                        if (adsReadData(g_adsConfig.address, &rawCode)) {
-                            spectroReadOk = true;
-                            float voltage = codeToVoltage(rawCode, g_adsConfig.vrefValue, (float)g_adsConfig.gain);
-                            g_lastSpectroRawCode = rawCode;
-                            g_lastSpectroVoltage = voltage;
-
-                            uint8_t status = SPECTRO_STATUS_VALID;
-                            if (rawCode >= 8388607 || rawCode <= -8388608) {
-                                status |= SPECTRO_STATUS_SATURATED;
+                        uint8_t spectroConversionCounter = 0;
+                        spectroReadStatus = adsReadData(
+                            g_adsConfig.address, &rawCode, &spectroConversionCounter);
+                        if (spectroReadStatus == ADS_READ_CRC_ERROR) {
+                            g_spectroCrcErrorCount++;
+                            spectroReadStatus = adsReadData(
+                                g_adsConfig.address, &rawCode, &spectroConversionCounter);
+                            if (spectroReadStatus == ADS_READ_CRC_ERROR) {
+                                g_spectroCrcErrorCount++;
                             }
-                            g_lastSpectroStatus = status;
-                            spectroRawCode = rawCode;
-                            spectroVoltage = voltage;
-                            spectroStatus = status;
+                        }
+
+                        if (spectroReadStatus == ADS_READ_OK) {
+                            bool duplicate = g_spectroCounterValid
+                                && spectroConversionCounter == g_lastSpectroConversionCounter;
+                            if (duplicate) {
+                                g_spectroDuplicateCount++;
+                            } else {
+                                g_spectroCounterValid = true;
+                                g_lastSpectroConversionCounter = spectroConversionCounter;
+
+                                float voltage = codeToVoltage(
+                                    rawCode, g_adsConfig.vrefValue, (float)g_adsConfig.gain);
+                                bool spectroTransient = false;
+                                if (acceptSpectroSample(voltage, &spectroTransient)) {
+                                    uint8_t status = SPECTRO_STATUS_VALID;
+                                    if (rawCode >= 8388607 || rawCode <= -8388608) {
+                                        status |= SPECTRO_STATUS_SATURATED;
+                                    }
+
+                                    g_lastSpectroRawCode = rawCode;
+                                    g_lastSpectroVoltage = voltage;
+                                    g_lastSpectroStatus = status;
+                                    spectroRawCode = rawCode;
+                                    spectroVoltage = voltage;
+                                    spectroStatus = status;
+                                    spectroPublishOk = true;
+                                } else if (spectroTransient) {
+                                    g_spectroTransientDropCount++;
+                                }
+                            }
                         } else {
                             g_lastSpectroStatus = SPECTRO_STATUS_I2C_ERROR;
-                            g_spectroI2CErrorCount++;
+                            if (spectroReadStatus == ADS_READ_I2C_ERROR) {
+                                g_spectroI2CErrorCount++;
+                            }
                         }
                     } else {
                         g_lastSpectroStatus = SPECTRO_STATUS_I2C_ERROR;
                         g_spectroI2CErrorCount++;
                     }
                     invalidateTcaCache();
-                    recordI2CBusFault(!spectroMuxOk);
+                    recordI2CBusFault(!spectroMuxOk || spectroReadStatus != ADS_READ_OK);
                     xSemaphoreGive(i2cMutex);
-                    if (spectroReadOk) {
+                    advanceSpectroDeadline(now, specInterval);
+                    if (spectroPublishOk) {
                         SpectroDataPacket pkt;
                         pkt.head1 = PACKET_HEADER1;
                         pkt.head2 = HEADER2_SPECTRO;
@@ -911,9 +1001,6 @@ void TaskComms(void *pvParameters) {
                         pkt.tail = PACKET_TAIL;
                         Serial.write((uint8_t*)&pkt, sizeof(pkt));
                         g_spectroSuccessCount++;
-                        do {
-                            g_nextSpectroDueMs += specInterval;
-                        } while ((int32_t)(now - g_nextSpectroDueMs) >= 0);
                     }
                 } else {
                     g_spectroMutexTimeoutCount++;
@@ -1813,10 +1900,15 @@ void sendHealthPacket() {
     Serial.printf("ANGLE_AGE_MS:%lu\n", oldestAngleAgeMs);
     Serial.printf("ANGLE_AGE_CH_MS:%lu,%lu,%lu,%lu\n",
         angleAgeMs[0], angleAgeMs[1], angleAgeMs[2], angleAgeMs[3]);
-    Serial.printf("ADS_HEALTH:SUCCESS=%lu,MUTEX_TIMEOUT=%lu,I2C_ERROR=%lu\n",
+    Serial.printf(
+        "ADS_HEALTH:SUCCESS=%lu,MUTEX_TIMEOUT=%lu,I2C_ERROR=%lu,"
+        "CRC_ERROR=%lu,DUPLICATE=%lu,TRANSIENT_DROP=%lu\n",
         (unsigned long)g_spectroSuccessCount,
         (unsigned long)g_spectroMutexTimeoutCount,
-        (unsigned long)g_spectroI2CErrorCount);
+        (unsigned long)g_spectroI2CErrorCount,
+        (unsigned long)g_spectroCrcErrorCount,
+        (unsigned long)g_spectroDuplicateCount,
+        (unsigned long)g_spectroTransientDropCount);
 }
 
 void sendIdentity() {

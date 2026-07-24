@@ -13,6 +13,9 @@
 #define ADS_CMD_RREG(r)     (0x20 | ((r) << 2))
 #define ADS_CMD_WREG(r)     (0x40 | ((r) << 2))
 
+// CONFIG2: enable the conversion counter and CRC-16 data integrity check.
+static const uint8_t ADS_CONFIG2_DCNT_CRC16 = 0x60;
+
 // ============== MUX 配置（单端） ==============
 #define ADS_MUX_AIN0_AVSS  0x08  // AIN0 vs AVSS
 #define ADS_MUX_AIN1_AVSS  0x09
@@ -85,19 +88,44 @@ inline bool adsReadRegister(uint8_t addr, uint8_t reg, uint8_t *value) {
     return true;
 }
 
-inline bool adsReadData(uint8_t addr, int32_t *rawCode) {
+enum ADSReadStatus {
+    ADS_READ_OK = 0,
+    ADS_READ_I2C_ERROR,
+    ADS_READ_CRC_ERROR
+};
+
+inline uint16_t adsCrc16Ccitt(const uint8_t *data, size_t length) {
+    uint16_t crc = 0xFFFF;
+    for (size_t i = 0; i < length; i++) {
+        crc ^= (uint16_t)data[i] << 8;
+        for (uint8_t bit = 0; bit < 8; bit++) {
+            crc = (crc & 0x8000) ? (uint16_t)((crc << 1) ^ 0x1021) : (uint16_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
+inline ADSReadStatus adsReadData(uint8_t addr, int32_t *rawCode, uint8_t *conversionCounter) {
     Wire.beginTransmission(addr);
     Wire.write(ADS_CMD_RDATA);
-    if (Wire.endTransmission(true) != 0) return false;
-    if (Wire.requestFrom(addr, (uint8_t)3) != 3) return false;
-    uint8_t b0 = Wire.read();
-    uint8_t b1 = Wire.read();
-    uint8_t b2 = Wire.read();
-    int32_t code = ((int32_t)b0 << 16) | ((int32_t)b1 << 8) | b2;
+    if (Wire.endTransmission(false) != 0) return ADS_READ_I2C_ERROR;
+    if (Wire.requestFrom(addr, (uint8_t)6) != 6) return ADS_READ_I2C_ERROR;
+
+    uint8_t frame[6];
+    for (uint8_t i = 0; i < sizeof(frame); i++) {
+        frame[i] = Wire.read();
+    }
+
+    uint16_t crcExpected = adsCrc16Ccitt(frame, 4);
+    uint16_t crcReceived = ((uint16_t)frame[4] << 8) | frame[5];
+    if (crcExpected != crcReceived) return ADS_READ_CRC_ERROR;
+
+    int32_t code = ((int32_t)frame[1] << 16) | ((int32_t)frame[2] << 8) | frame[3];
     // 24-bit 符号扩展
     if (code & 0x800000) code |= 0xFF000000;
+    *conversionCounter = frame[0];
     *rawCode = code;
-    return true;
+    return ADS_READ_OK;
 }
 
 // ============== 电压换算 ==============
@@ -152,8 +180,8 @@ inline bool adsInitAndStart(ADSConfig &cfg) {
                   | ((cfg.vrefMode & 0x03) << 1);
     if (!adsWriteRegister(cfg.address, 1, reg1)) return false;
 
-    // CONFIG2 & CONFIG3: 保持默认 (DRDY on DRDY pin, CRC disabled, etc.)
-    if (!adsWriteRegister(cfg.address, 2, 0x00)) return false;
+    // CONFIG2: conversion counter + CRC16; CONFIG3 keeps IDAC routing disabled.
+    if (!adsWriteRegister(cfg.address, 2, ADS_CONFIG2_DCNT_CRC16)) return false;
     if (!adsWriteRegister(cfg.address, 3, 0x00)) return false;
 
     // 设置参考电压值
