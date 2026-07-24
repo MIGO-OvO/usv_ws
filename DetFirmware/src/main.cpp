@@ -38,7 +38,7 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define PID_PACKET_INTERVAL 20  // 50Hz 数据包发送间�?
 
 #define DET_FIRMWARE_ID "USV_DETECTOR"
-#define DET_FIRMWARE_VERSION "2026.07.24"
+#define DET_FIRMWARE_VERSION "2026.07.24.1"
 #define COMMS_TASK_DELAY_MS 5
 #define SENSOR_TASK_DELAY_ACTIVE_MS 5
 #define SENSOR_TASK_DELAY_IDLE_MS 20
@@ -53,9 +53,10 @@ float g_pidOutputMax = 6.0f;      // 最大输�?
 #define I2C_RECOVERY_FAILURE_THRESHOLD 8
 #define I2C_RECOVERY_MIN_INTERVAL_MS 5000UL
 
-// 抑制 ADC 单点瞬态：大于阈值的跳变需要下一点在容差内重复确认。
+// 抑制 ADC 瞬态：大于阈值的跳变需要多个连续样本一致后才确认。
 #define SPECTRO_TRANSIENT_THRESHOLD_V 0.020f
 #define SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V 0.010f
+#define SPECTRO_TRANSIENT_CONFIRM_SAMPLES 3
 
 #define MAX_OPEN_LOOP_RPM 20.0f
 #define MAX_COMMAND_DEGREES 3600.0f
@@ -205,6 +206,7 @@ bool g_spectroAcceptedSampleValid = false;
 float g_spectroAcceptedVoltage = 0.0f;
 bool g_spectroTransientPending = false;
 float g_spectroPendingVoltage = 0.0f;
+uint8_t g_spectroPendingCount = 0;
 
 // --- 引脚定义 ---
 #define X_STP 13
@@ -477,6 +479,7 @@ void resetSpectroSamplingIntegrity() {
     g_spectroAcceptedVoltage = 0.0f;
     g_spectroTransientPending = false;
     g_spectroPendingVoltage = 0.0f;
+    g_spectroPendingCount = 0;
 }
 
 bool acceptSpectroSample(float voltage, bool *spectroTransient) {
@@ -485,25 +488,41 @@ bool acceptSpectroSample(float voltage, bool *spectroTransient) {
         g_spectroAcceptedSampleValid = true;
         g_spectroAcceptedVoltage = voltage;
         g_spectroTransientPending = false;
+        g_spectroPendingCount = 0;
         return true;
     }
 
     if (fabsf(voltage - g_spectroAcceptedVoltage) <= SPECTRO_TRANSIENT_THRESHOLD_V) {
         g_spectroAcceptedVoltage = voltage;
         g_spectroTransientPending = false;
+        g_spectroPendingCount = 0;
         return true;
     }
 
-    if (g_spectroTransientPending
-        && fabsf(voltage - g_spectroPendingVoltage) <= SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V) {
+    bool newTransient = !g_spectroTransientPending
+        || fabsf(voltage - g_spectroPendingVoltage) > SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V;
+    if (newTransient) {
+        g_spectroPendingVoltage = voltage;
+        g_spectroPendingCount = 1;
+    } else {
+        if (g_spectroPendingCount < UINT8_MAX) {
+            g_spectroPendingCount++;
+        }
+        g_spectroPendingVoltage = (
+            g_spectroPendingVoltage * (float)(g_spectroPendingCount - 1) + voltage
+        ) / (float)g_spectroPendingCount;
+    }
+
+    if (g_spectroPendingCount >= SPECTRO_TRANSIENT_CONFIRM_SAMPLES) {
         g_spectroAcceptedVoltage = voltage;
         g_spectroTransientPending = false;
+        g_spectroPendingCount = 0;
         return true;
     }
 
-    g_spectroPendingVoltage = voltage;
     g_spectroTransientPending = true;
-    *spectroTransient = true;
+    // Count one event, not every rejected sample used to confirm it.
+    *spectroTransient = newTransient;
     return false;
 }
 
