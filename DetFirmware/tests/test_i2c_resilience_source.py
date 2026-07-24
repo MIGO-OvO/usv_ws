@@ -43,10 +43,14 @@ def test_ads_deadline_retries_mutex_timeout_without_consuming_period():
 
     assert "(int32_t)(now - g_nextSpectroDueMs) >= 0" in body
     assert "g_spectroMutexTimeoutCount++" in body
-    assert "g_nextSpectroDueMs += specInterval" in body
-    assert body.index("g_nextSpectroDueMs += specInterval") > body.index("if (spectroReadOk)")
-    read_index = body.index("bool spectroReadOk")
-    assert body.index("xSemaphoreGive(i2cMutex)", read_index) < body.index("Serial.write", read_index)
+    assert "advanceSpectroDeadline(now, specInterval)" in body
+    read_index = body.index("ADSReadStatus spectroReadStatus")
+    give_index = body.index("xSemaphoreGive(i2cMutex)", read_index)
+    advance_index = body.index("advanceSpectroDeadline(now, specInterval)", read_index)
+    publish_index = body.index("if (spectroPublishOk)", read_index)
+    timeout_index = body.index("g_spectroMutexTimeoutCount++", read_index)
+    assert give_index < advance_index < publish_index < timeout_index
+    assert give_index < body.index("Serial.write", read_index)
 
 
 def test_angle_freshness_tracks_each_channel_and_reports_oldest_age():
