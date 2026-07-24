@@ -33,17 +33,20 @@ def test_ads_sampling_retries_crc_and_rejects_duplicate_conversion_counter():
     assert "spectroConversionCounter == g_lastSpectroConversionCounter" in source
 
 
-def test_ads_sampling_drops_isolated_large_transient_without_changing_packet_layout():
+def test_ads_sampling_requires_three_consistent_large_samples_without_changing_packet_layout():
     source = MAIN_SOURCE.read_text(encoding="utf-8")
 
     assert "SPECTRO_TRANSIENT_THRESHOLD_V" in source
     assert "SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V" in source
+    assert "#define SPECTRO_TRANSIENT_CONFIRM_SAMPLES 3" in source
     assert "g_spectroTransientDropCount" in source
     assert "acceptSpectroSample" in source
     assert "spectroTransient" in source
+    assert "g_spectroPendingCount" in source
     assert "fabsf(voltage - g_spectroAcceptedVoltage) <= SPECTRO_TRANSIENT_THRESHOLD_V" in source
-    assert "fabsf(voltage - g_spectroPendingVoltage) <= SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V" in source
-    assert "*spectroTransient = true" in source
+    assert "fabsf(voltage - g_spectroPendingVoltage) > SPECTRO_TRANSIENT_CONFIRM_TOLERANCE_V" in source
+    assert "g_spectroPendingCount >= SPECTRO_TRANSIENT_CONFIRM_SAMPLES" in source
+    assert "*spectroTransient = newTransient" in source
     assert "g_spectroTransientDropCount++" in source
 
 
