@@ -105,8 +105,10 @@ Updated: 2026-06-19
 - 分光基线设置与电压/吸光度实时推送。
 - 数据中心跟随 `sampling_started` 自动建档，跟随 `sampling_stopped` / `survey_stopped` 停止记录。
 - 数据中心按 `sampling_started` -> `sampling_stopped` 生成 `sample_windows[]`；raw frame 不写入 mission JSON，只保存相对路径与摘要。
+- 任务元数据采用同目录临时文件 + `fsync` + 原子替换；raw JSONL 周期同步并在窗口关闭时强制同步。正常结束状态为 `completed`，服务重启后未结束任务标记为 `interrupted`。
 - 航点采样配置 CRUD。
 - 采样窗口 API：`GET /api/data/mission/<id>/samples`、`GET /api/data/mission/<id>/sample/<sample_id>`、`GET /api/data/mission/<id>/sample/<sample_id>/raw?limit=2000&offset=0`、`POST /api/data/mission/<id>/sample/<sample_id>/manual-result`。
+- 整任务归档：`GET /api/data/mission/<id>/archive` 下载 ZIP，包含任务 JSON、摘要 CSV、各采样窗口 JSONL 与原始帧 CSV。
 - 实验模式 Lab：`GET/POST /api/lab/config`、`POST /api/lab/start`、`POST /api/lab/stop`、`GET /api/lab/status`、`GET/POST /api/lab/water-area`、`POST /api/lab/mission`、`POST /api/lab/route/auto-scan`、`POST /api/lab/mission/import-qgc`。
 - 污染物 surface：`GET /api/data/mission/<id>/surface`、`GET /api/map/live/surface`，支持 `metric`、`size`、`power`、`include_lab`、`download`。
 - 日志列表、日志读取、日志下载。
