@@ -24,6 +24,7 @@ Updated: 2026-06-19
 | `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | `[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp]` |
 | `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | COMMAND_ACK 队列 |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
+| `/usv/sampling_result` | `String(JSON)` | trigger -> bridge | FCU 结果：`source=fcu`、`sample_id`（整数 1..65535）、`outcome`、`reason`；非 latched |
 | `/usv/mission_status` | `String` | trigger -> bridge | 状态码来源 |
 | `/usv/automation_status` | `String(JSON)` | pump -> bridge/Web | 自动化运行、暂停、步骤和 PID 状态 |
 | `/usv/pump_command` | `String` | trigger/Web -> pump | 下发检测装置文本命令 |
@@ -91,7 +92,17 @@ Updated: 2026-06-19
 | `USV_EHEAP` | ESP32 可用 heap 百分比，单位 `%`；未知为 `-1` |
 | `USV_SMPL` | 固件在 `NAV_SCRIPT_TIME(param1=1)` 触发 ROS 定点采样 |
 | `USV_SURV` | 固件触发走航采样开关 |
-| `USV_DONE` | ROS 通知固件采样完成 |
+| `USV_DONE` | 仅在匹配 ID 的 `succeeded` 或明确 `skipped` 结果后，ROS 通知固件结束采样等待 |
+
+### FCU 采样结果约束
+
+- `sampling_stopped` 只关闭 Web 记录生命周期，不再触发 `USV_DONE`。
+- `outcome` 仅接受 `succeeded/failed/cancelled/skipped`。失败、取消、非 FCU 来源、ID 不匹配或非法结果均不放行。
+- FCU 启动失败、执行失败按 `sampling_on_fail` 处理：HOLD/ABORT 请求 HOLD 且不放行；明确 SKIP 才发布 `skipped` 允许放行。主动取消不受 SKIP 策略影响。忙碌拒绝不会中断已有采样。
+- 自动化正常结束为 `finished`，直接停止为 `stopped`，异常为 `failed`；不得把后两者解释成成功。
+- bridge 先登记 ID 再发布触发；最近同 ID 重复触发不重启采样，终态结果只接受一次，新 ID 清除尚未发送的旧完成通知。
+- 本修复不改变飞控脚本超时行为，不保证 HOLD 请求已生效，也不新增跨重启会话标识或完成消息可靠交付。FCU 仍不走旧 waypoint 自动重试路径。
+- 更新必须停机并成套重启 trigger/bridge/pump；不得混用新旧版本进程。QGC 和飞控的命令号、22 个遥测字段保持不变。
 
 ## Web API / Socket.IO
 

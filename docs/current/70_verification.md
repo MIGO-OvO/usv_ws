@@ -63,6 +63,23 @@ Updated: 2026-06-19
 | 完成通知 | bridge 日志、固件行为 | ROS 发 `USV_DONE`，固件继续 mission script |
 | 失败策略 | 配置 `HOLD/SKIP/ABORT` | 行为与配置一致 |
 
+## FCU 采样结果安全回归
+
+离线：在 `src/usv_ros` 执行 `python3 -m unittest discover -s tests -p 'test_fcu_sampling_result.py'`。测试使用真实 trigger/bridge 方法和模拟传输，不连接设备。
+
+现场需同步记录 `/usv/sampling_result`、`/usv/trigger_status`、`/mavros/state` 与 MAVLink 消息：
+
+| 场景 | 通过标准 |
+|---|---|
+| 正常完成 | 同 ID `succeeded` 后才有 `USV_DONE`；重复结果不重复放行 |
+| 进样启动失败、自动化启动失败、PID 超时 | HOLD/ABORT 下为 `failed`，无 `USV_DONE`，记录窗口结束；单独确认实际 HOLD |
+| QGC 31011、Web 自动化停止 | `cancelled`，无 `USV_DONE`；停止服务期间到达的 finished 不可覆盖取消 |
+| 明确 SKIP | 结果为 `skipped` 而非成功，允许同 ID `USV_DONE` |
+| 重复触发、旧 ID/非法/非 FCU 结果 | 不重复采样，不释放当前新 ID；新 ID 清除未发送的旧完成通知 |
+| 普通 sampling_stopped | 只关闭记录，不生成完成通知 |
+
+必须停机更新并成套重启 trigger/bridge/pump。上述测试不覆盖固件独立脚本超时放行、HOLD 请求失败后的实际船态、跨重启 ID 复用或无线端到端消息送达，不能替代 SITL/实船验收。
+
 ## 检测装置验证
 
 | 项 | 方法 | 通过标准 |

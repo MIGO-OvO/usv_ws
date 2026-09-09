@@ -24,9 +24,11 @@ Updated: 2026-06-19
 | `src/usv_ros/scripts/stop_usv_all.sh` | 停止主系统/router/roscore |
 | `src/usv_ros/scripts/status_usv_all.sh` | 进程、热点、MAVROS、bridge 诊断 |
 | `src/usv_ros/scripts/usvctl.sh` | `usvctl/usvon/usvoff/usvdeploy` 分发入口 |
-| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、22 字段遥测、命令接收、ACK、`USV_DONE` |
+| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、22 字段遥测、命令接收、ACK；按 `/usv/sampling_result` 的匹配成功/SKIP 结果门控 `USV_DONE` |
 | `src/usv_ros/scripts/mavlink_trigger_node.py` | `31010..31019` 命令解释、采样状态机、航点采样、实验液滴事件发布 |
 | `src/usv_ros/scripts/pump_control_node.py` | 检测装置串口、自动化、分光、泵控 |
+| `src/usv_ros/scripts/lib/automation_engine.py` | 自动化执行；区分 `finished`、`stopped`、`failed` 终态 |
+| `src/usv_ros/tests/test_fcu_sampling_result.py` | FCU 触发→结果→bridge 完成通知的安全回归，包括取消、失败、重复和迟到消息 |
 | `src/usv_ros/scripts/lab_sim_node.py` | 实验虚拟船位仿真节点，`/usv/lab_sim/*` 话题 |
 | `src/usv_ros/scripts/system_health_node.py` | Jetson CPU/内存/温度、ROS 节点、ESP32 健康聚合 |
 | `src/usv_ros/scripts/web_config_server.py` | Flask API、Socket.IO、配置、日志、诊断、Lab/坐标/surface |
