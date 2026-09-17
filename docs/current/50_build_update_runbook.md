@@ -40,6 +40,19 @@ src/usv_ros/scripts/start_usv_all.sh
 src/usv_ros/scripts/status_usv_all.sh
 ```
 
+任务数据默认写入 `~/usv_ws/data/missions`。如数据盘挂载到其他位置，使用显式绝对路径启动：
+
+```bash
+src/usv_ros/scripts/start_usv_all.sh data_dir:=/mnt/usv-data/missions
+```
+
+热点连接后可下载完整历史任务包：
+
+```bash
+curl http://10.42.0.1:5000/api/data/missions
+curl http://10.42.0.1:5000/api/data/mission/<mission_id>/archive > mission.zip
+```
+
 全局命令安装后：
 
 ```bash
