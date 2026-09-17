@@ -42,6 +42,7 @@ Updated: 2026-06-03
 - `src/usv_ros/`：ROS/Web/前端/脚本改动必须在该仓库内单独 commit。
 - `ardupilot-usv/`：固件改动必须在该仓库内单独 commit；构建在 WSL Ubuntu。
 - `WQ-USV-QGroundControl/`：QGC 改动必须在该仓库内单独 commit。
+- `DetFirmware/`：独立私有仓库 `MIGO-OvO/DetFirmware`，默认分支 `main`；固件、协议及测试在该仓库内单独 commit，先读 `DetFirmware/README.md`。根仓库不再跟踪该目录，不使用 submodule。
 - 不在根目录执行跨仓库全量 `git add .`。
 
 ## 输出要求
