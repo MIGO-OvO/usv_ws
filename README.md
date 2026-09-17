@@ -20,7 +20,7 @@ Updated: 2026-05-20
 | `ardupilot-usv/` | 定制 ArduRover 固件 |
 | `WQ-USV-QGroundControl/` | 定制 QGroundControl |
 | `src/usv_ros/` | Jetson Nano ROS 载荷系统 |
-| `DetFirmware/` | ESP32 检测装置固件 |
+| `DetFirmware/` | ESP32 检测装置固件，独立私有仓库 [MIGO-OvO/DetFirmware](https://github.com/MIGO-OvO/DetFirmware)，默认分支 `main` |
 | `MotorControlApp_Pyside6/` | Windows 检测装置上位机 |
 
 ## Bootstrap
@@ -32,6 +32,10 @@ bootstrap_workspace.bat
 ```
 
 脚本负责拉取/更新外部源码仓库。不要把外部源码目录提交到根仓库。
+
+`DetFirmware` 需要已获授权的 GitHub 账号。脚本不会覆盖现有目录：旧工作区中若
+`DetFirmware/` 没有独立 `.git`，须先备份本地改动，再迁移或另行克隆；不要直接清空目录。
+新克隆通过 bootstrap 获取固件，开发与台架验证说明见 `DetFirmware/README.md`。
 
 ## 根仓库保留内容
 
@@ -76,6 +80,7 @@ cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 ## Git 约束
 
 - 根仓库只提交文档和根入口。
-- `src/usv_ros/`、`ardupilot-usv/`、`WQ-USV-QGroundControl/` 的改动必须进入对应子仓库单独 commit。
+- `src/usv_ros/`、`ardupilot-usv/`、`WQ-USV-QGroundControl/`、`DetFirmware/`、`MotorControlApp_Pyside6/` 的改动必须进入对应子仓库单独 commit。
 - 不在根目录执行跨仓库全量提交。
 - 不记录带凭证的 remote URL。
+- `DetFirmware/` 已从根仓库当前版本停止跟踪；历史未改写，旧提交仍保留当时源码及其原有访问权限。切换仍跟踪该目录的旧分支前，先备份独立仓库。

@@ -7,10 +7,12 @@ set "SRC_DIR=%ROOT_DIR%\src"
 set "ARDUPILOT_DIR=%ROOT_DIR%\ardupilot-usv"
 set "QGC_DIR=%ROOT_DIR%\WQ-USV-QGroundControl"
 set "USV_ROS_DIR=%SRC_DIR%\usv_ros"
+set "DETFIRMWARE_DIR=%ROOT_DIR%\DetFirmware"
 
 set "ARDUPILOT_URL=https://github.com/MIGO-OvO/ardupilot-usv.git"
 set "QGC_URL=https://github.com/MIGO-OvO/WQ-USV-QGroundControl.git"
 set "USV_ROS_URL=https://github.com/MIGO-OvO/usv_ros.git"
+set "DETFIRMWARE_URL=https://github.com/MIGO-OvO/DetFirmware.git"
 
 echo [workspace-bootstrap] ROOT=%ROOT_DIR%
 where git >nul 2>nul || (
@@ -23,6 +25,8 @@ if not exist "%SRC_DIR%" mkdir "%SRC_DIR%"
 call :clone_repo ardupilot-usv "%ARDUPILOT_URL%" "%ARDUPILOT_DIR%" || exit /b 1
 call :clone_repo WQ-USV-QGroundControl "%QGC_URL%" "%QGC_DIR%" || exit /b 1
 call :clone_repo usv_ros "%USV_ROS_URL%" "%USV_ROS_DIR%" || exit /b 1
+rem DetFirmware is private; authenticate Git with an authorized GitHub account first.
+call :clone_repo DetFirmware "%DETFIRMWARE_URL%" "%DETFIRMWARE_DIR%" || exit /b 1
 
 echo [workspace-bootstrap] 工作区源码目录已就位
 echo.
@@ -44,6 +48,11 @@ echo    cd /mnt/d/usv_ws/ardupilot-usv
 echo    git submodule update --init --recursive
 echo    ./waf configure --board Pixhawk6C
 echo    ./waf rover
+echo.
+echo 4. DetFirmware ^(PlatformIO^)
+echo    cd /d "%DETFIRMWARE_DIR%"
+echo    pio run -e nodemcu-32s
+echo    python -m pytest tests -q
 exit /b 0
 
 :clone_repo

@@ -48,7 +48,8 @@ usv_ws/
 - 回复中文、简明；涉及协议时给出源码路径和验证方式。
 - 文档冲突时以源码为准；MAVLink 事实以 `ardupilot-usv/` 为准。
 - 根仓库只提交 `README.md`、`AGENTS.md`、`docs/`、bootstrap 入口和根配置。
-- `src/usv_ros/`、`ardupilot-usv/`、`WQ-USV-QGroundControl/`、`MotorControlApp_Pyside6/` 有独立 Git，业务改动在子仓库内就地提交。
+- `src/usv_ros/`、`ardupilot-usv/`、`WQ-USV-QGroundControl/`、`DetFirmware/`、`MotorControlApp_Pyside6/` 有独立 Git，业务改动在子仓库内就地提交。
+- `DetFirmware` 为 `MIGO-OvO/DetFirmware` 私有仓库，默认分支 `main`，开发入口为其 `README.md`；根仓库忽略该目录，不使用 submodule。
 - 不在根目录执行跨仓库全量 `git add .`。
 - 不在文档中记录带凭证的 remote URL。
 
