@@ -1,0 +1,66 @@
+{
+  "schema_version": 2,
+  "source_hash_format": "sha256-text-lf",
+  "contract": "usv-safety1",
+  "field_verified": false,
+  "repositories": {
+    "ros": {
+      "path": "src/usv_ros",
+      "commit": "02c3a8bb60727a231ff1199c664683d6aaaf6583",
+      "dirty": true,
+      "working_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "contract_files": {
+        "scripts/pump_control_node.py": "59f2269109c190af2337f2f6f9fc4e11a1cc983edd243e7413c635b9a00f4809",
+        "scripts/mavlink_trigger_node.py": "3fca71131decbb36292b3c54c39e2c63c54f81a30efe2e5fe5be754e5dbf03fa",
+        "scripts/usv_mavlink_router_bridge.py": "4a6ea23931f6e5293705d76868acc46705c0054a0ee22ce7490ba556a6671254",
+        "scripts/web_config_server.py": "721d3fc273630bd9d4a65d9b44340d50be387af08b21e3395e28c3e50ed4e497",
+        "scripts/lib/web_access.py": "b2c09f4150a1de58d7a3097c301ae34f4c5f1df830fdef5a7544d3573f37a181",
+        "launch/usv_bringup.launch": "ceb84de91c6278756ab89f9ab2a0a4f04033b7b0237804de6ce14659c11f1b86"
+      }
+    },
+    "fcu": {
+      "path": "ardupilot-usv",
+      "commit": "d93177954f86e04c9a8140828377b585300be7ad",
+      "dirty": false,
+      "working_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "contract_files": {
+        "Rover/mode_auto.cpp": "ff0733366f996c7cda39a44a2583f13c627294df477b26ba085e47aa768816da",
+        "Rover/GCS_MAVLink_Rover.cpp": "49d2092bdcc92e23d7de5614018cd1b196ac262e8742b5527de7ee1112345d80",
+        "Rover/sensors.cpp": "41ad479b7110dce9f3fec82804a751904b16daa23af8602b32321c0105630787"
+      }
+    },
+    "qgc": {
+      "path": "WQ-USV-QGroundControl",
+      "commit": "ae99238fc44f1e8a13186ab579e9248215c13cd2",
+      "dirty": true,
+      "working_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "contract_files": {
+        "custom/src/USVPayloadFactGroup.cc": "02a33b5bd1f3e2890f2a8a95a986239f91b0eabb49add68ea06c16ddd80be12a",
+        "src/MissionManager/MavCmdInfoRover.json": "964365f91560390097aeafc4a1cbecf56dd4055853183e276d73060b0e26dfe9"
+      }
+    },
+    "detector": {
+      "path": "DetFirmware",
+      "commit": "5a0bd5ec761fad30449123dfee87a6a58fe4c72e",
+      "dirty": false,
+      "working_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "contract_files": {
+        "src/main.cpp": "ae84c05616e657ab06f7347d093aa9676510fd84b5e08439e452a8e906d13a19",
+        "src/protocol_packets.h": "d0b93e2b39db5b9538b52009317153d1752a20ef84125bbc5e61677138636974",
+        "src/control_watchdog.h": "654b9bdc7ba9ab8bcb07568332eeb5a8a267b120978172106b491a6793c1d7b4",
+        "platformio.ini": "09c26bf6cb046a0d8e9c86b3d6e91eee4ae515c0176b637107d6e1910ab629db"
+      }
+    },
+    "desktop": {
+      "path": "MotorControlApp_Pyside6",
+      "commit": "3955228f8366f6b1fb83cfc53bde8d03996481f8",
+      "dirty": false,
+      "working_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "contract_files": {
+        "src/hardware/serial_reader.py": "4cb7305f3b17aa497aed0ee9a79da6c84b67333e5ddeec14f266995676e0429c",
+        "src/core/serial_manager.py": "e61c682c0bc4d2d093e2a93f37f1d53486af4ce2afd7a821a5b98c323b7b9fc4",
+        "src/ui/mixins/serial_mixin.py": "56a62e9b18b5b0d2da25403ae6dc07b4f64a489843eb476ad514b026a56ed4e8"
+      }
+    }
+  }
+}
