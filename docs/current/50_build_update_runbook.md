@@ -4,6 +4,16 @@ Updated: 2026-05-20
 
 ## 根仓库
 
+### safety1 成套发布要求
+
+本版本不得只更新 ROS：DetFirmware/ROS/Windows 要匹配 `WATCHDOG1`；飞控/QGC 要匹配超时 HOLD 和 `USV_FAIL` 语义。更新前停任务和执行器，保留上一整套产物与参数；不要在运行中混用进程版本。
+
+在总仓库运行 `python docs/tools/check_workspace_compatibility.py` 做源码检查；`--snapshot` 将候选五端提交号、工作树状态及关键文件哈希打印为 JSON。保存候选后用 `--manifest <候选文件>` 检查匹配。`--require-release` 额外拒绝脏子仓库、未记录现场验收、缺少证据引用/产物哈希的清单。脚本不部署、不修改仓库，不是自动认证器。
+
+当前清单 schema v2 的文本源码哈希先将 CRLF 规范化为 LF，避免相同提交在 Windows/Linux 检出时误报。归档的 v1 工作树快照保留历史意义，不作为当前版本匹配清单；提交后重新生成 v2 候选，仍须独立记录现场验收。
+
+远程 Web 控制需通过服务环境配置 `USV_WEB_CONTROL_TOKEN`（至少 16 字符，随机生成并安全分发，不提交 Git）；未配置时远端只能监控。浏览器先打开 `http://船载地址:5000/api/control/auth`，用户名 `operator`，密码为该令牌，再使用控制台。通过 HTTPS/VPN 保护非受控链路；令牌不加密 HTTP。
+
 ```bat
 bootstrap_workspace.bat
 ```

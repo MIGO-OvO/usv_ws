@@ -4,6 +4,12 @@ Updated: 2026-06-19
 
 ## 根仓库
 
+安全发布检查入口：`docs/tools/check_workspace_compatibility.py`（只读源码契约、五端候选版本快照和发布条件检查）；`docs/tools/test_workspace_compatibility.py` 为检查器回归。
+
+新增安全实现：`DetFirmware/src/control_watchdog.h`（主机失联锁存）；`src/usv_ros/scripts/lib/web_access.py`（API 写访问保护）；`tests/test_system_safety_contract.py`、`test_sampling_context_contract.py`、`test_web_control_access.py`（ROS 安全回归）；`ardupilot-usv/tests/test_usv_sampling_safety.py`（宿主 C++ 验证）。
+
+提交前审计回归：`src/usv_ros/tests/test_sampling_terminal_contract.py`（匹配终态/人工模式/走航停止）、`src/usv_ros/tests/test_sampling_cleanup_ownership.py`（真实引擎＋模拟串口的 owner 清理与租约）、`DetFirmware/tests/test_pid_test_scheduling_native.py`（非阻塞 PID 轮次调度）、`MotorControlApp_Pyside6/tests/test_spectro_invalid_isolation.py`（无效信号隔离）。
+
 | 路径 | 职责 |
 |---|---|
 | `README.md` | 总入口，指向 `docs/current/00_index.md` |

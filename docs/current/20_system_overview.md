@@ -52,7 +52,7 @@ NAV_SCRIPT_TIME(param1=1)
 
 ## 当前能力
 
-`sampling_stopped` 仍用于关闭 Web 记录窗口，但不触发飞控完成通知。失败/取消不发送 `USV_DONE`；明确配置的 SKIP 以 `skipped` 结果放行，不标记为成功。HOLD 请求及飞控自身脚本超时行为须分别验证。
+`sampling_stopped` 只关闭 Web 记录窗口，不触发飞控完成通知。失败/取消不发送 `USV_DONE`；明确配置的 SKIP 以 `skipped` 结果放行，不标记为成功。safety1 飞控对采样超时/伴随链路失联默认 HOLD，并支持双向 `USV_FAIL`；ESP32 `WATCHDOG1` 处理主机失联停机。实际船态、物理输出与跨重启行为仍需 SITL/台架验收。
 
 - 航线定点采样只使用 `MAV_CMD_NAV_SCRIPT_TIME`，`param1=1` 表示 USV 定点采样，`param2` 为 1..255 秒超时。
 - `COMMAND_LONG 31010..31019`：手动采样、停止、暂停、恢复、校准、走航、基线、分光启停。

@@ -6,6 +6,8 @@ Updated: 2026-05-20
 
 ## 当前文档入口
 
+整船 safety1 候选检查：`python docs/tools/check_workspace_compatibility.py`；成套升级、访问令牌与发布门槛见 `docs/current/50_build_update_runbook.md`。候选源码不是已完成台架验收的现场版本。
+
 - 总索引：`docs/current/00_index.md`
 - Agent 入口：`AGENTS.md`
 - 完整 Agent 规范：`docs/current/10_agent.md`
