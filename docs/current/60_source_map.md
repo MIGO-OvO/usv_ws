@@ -4,6 +4,12 @@ Updated: 2026-06-19
 
 ## 根仓库
 
+安全发布检查入口：`docs/tools/check_workspace_compatibility.py`（只读源码契约、五端候选版本快照和发布条件检查）；`docs/tools/test_workspace_compatibility.py` 为检查器回归。
+
+新增安全实现：`DetFirmware/src/control_watchdog.h`（主机失联锁存）；`src/usv_ros/scripts/lib/web_access.py`（API 写访问保护）；`tests/test_system_safety_contract.py`、`test_sampling_context_contract.py`、`test_web_control_access.py`（ROS 安全回归）；`ardupilot-usv/tests/test_usv_sampling_safety.py`（宿主 C++ 验证）。
+
+提交前审计回归：`src/usv_ros/tests/test_sampling_terminal_contract.py`（匹配终态/人工模式/走航停止）、`src/usv_ros/tests/test_sampling_cleanup_ownership.py`（真实引擎＋模拟串口的 owner 清理与租约）、`DetFirmware/tests/test_pid_test_scheduling_native.py`（非阻塞 PID 轮次调度）、`MotorControlApp_Pyside6/tests/test_spectro_invalid_isolation.py`（无效信号隔离）。
+
 | 路径 | 职责 |
 |---|---|
 | `README.md` | 总入口，指向 `docs/current/00_index.md` |
@@ -24,9 +30,11 @@ Updated: 2026-06-19
 | `src/usv_ros/scripts/stop_usv_all.sh` | 停止主系统/router/roscore |
 | `src/usv_ros/scripts/status_usv_all.sh` | 进程、热点、MAVROS、bridge 诊断 |
 | `src/usv_ros/scripts/usvctl.sh` | `usvctl/usvon/usvoff/usvdeploy` 分发入口 |
-| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、22 字段遥测、命令接收、ACK、`USV_DONE` |
+| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、22 字段遥测、命令接收、ACK；按 `/usv/sampling_result` 的匹配成功/SKIP 结果门控 `USV_DONE` |
 | `src/usv_ros/scripts/mavlink_trigger_node.py` | `31010..31019` 命令解释、采样状态机、航点采样、实验液滴事件发布 |
 | `src/usv_ros/scripts/pump_control_node.py` | 检测装置串口、自动化、分光、泵控 |
+| `src/usv_ros/scripts/lib/automation_engine.py` | 自动化执行；区分 `finished`、`stopped`、`failed` 终态 |
+| `src/usv_ros/tests/test_fcu_sampling_result.py` | FCU 触发→结果→bridge 完成通知的安全回归，包括取消、失败、重复和迟到消息 |
 | `src/usv_ros/scripts/lab_sim_node.py` | 实验虚拟船位仿真节点，`/usv/lab_sim/*` 话题 |
 | `src/usv_ros/scripts/system_health_node.py` | Jetson CPU/内存/温度、ROS 节点、ESP32 健康聚合 |
 | `src/usv_ros/scripts/web_config_server.py` | Flask API、Socket.IO、配置、日志、诊断、Lab/坐标/surface |

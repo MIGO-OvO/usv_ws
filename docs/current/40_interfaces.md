@@ -24,6 +24,7 @@ Updated: 2026-06-19
 | `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | `[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp]` |
 | `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | COMMAND_ACK 队列 |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
+| `/usv/sampling_result` | `String(JSON)` | trigger -> bridge | FCU 结果：`source=fcu`、`sample_id`（整数 1..65535）、`outcome`、`reason`；非 latched |
 | `/usv/mission_status` | `String` | trigger -> bridge | 状态码来源 |
 | `/usv/automation_status` | `String(JSON)` | pump -> bridge/Web | 自动化运行、暂停、步骤和 PID 状态 |
 | `/usv/pump_command` | `String` | trigger/Web -> pump | 下发检测装置文本命令 |
@@ -91,7 +92,43 @@ Updated: 2026-06-19
 | `USV_EHEAP` | ESP32 可用 heap 百分比，单位 `%`；未知为 `-1` |
 | `USV_SMPL` | 固件在 `NAV_SCRIPT_TIME(param1=1)` 触发 ROS 定点采样 |
 | `USV_SURV` | 固件触发走航采样开关 |
-| `USV_DONE` | ROS 通知固件采样完成 |
+| `USV_DONE` | 仅在匹配 ID 的 `succeeded` 或明确 `skipped` 结果后，ROS 通知固件结束采样等待 |
+
+### FCU 采样结果约束
+
+- `sampling_stopped` 只关闭 Web 记录生命周期，不再触发 `USV_DONE`。
+- `outcome` 仅接受 `succeeded/failed/cancelled/skipped`。失败、取消、非 FCU 来源、ID 不匹配或非法结果均不放行。
+- FCU 启动失败、执行失败按 `sampling_on_fail` 处理：HOLD/ABORT 请求 HOLD 且不放行；明确 SKIP 才发布 `skipped` 允许放行。主动取消不受 SKIP 策略影响。忙碌拒绝不会中断已有采样。
+- 自动化正常结束为 `finished`，直接停止为 `stopped`，异常为 `failed`；不得把后两者解释成成功。
+- bridge 先登记 ID 再发布触发；最近同 ID 重复触发不重启采样，终态结果只接受一次，新 ID 清除尚未发送的旧完成通知。
+- safety1 固件对 `param1=1` 的采样脚本：超时或伴随遥测超过 3 秒未更新时停止当前导航输出并进入 HOLD，不自动放行；其他脚本保留原有超时语义。`param2=0` 对 USV 采样按 255 秒上限处理。
+- ROS `set_mode` 在请求发送后最多等待 3 秒观测实际模式；`mode_sent` 不再等同于模式已生效。HOLD 不是原地定位保持，实际船态仍需实测。
+- 人工 MANUAL/RTL 接管优先于迟到的旧采样失败；ROS 取消旧采样而不回切模式，飞控 `USV_FAIL` 只作用于当前 AUTO 中匹配的采样。非 USV 脚本进入失败不继承上一 USV 的超时状态。
+- 新增控制事件 `USV_FAIL(sample_id)`：ROS 失败/取消通知飞控 HOLD；飞控超时也用同名事件通知 bridge 取消匹配采样。它不是第 23 个显示遥测字段。飞控只接受本 sysid、component 191 的载荷消息；bridge 只接受本 sysid、component 1 的飞控事件。
+- `USV_DONE/USV_FAIL` 仍为有限传输重试，不具备端到端 ACK 或持久化交付；未引入飞控跨重启会话 ID。丢包时安全兜底是 HOLD，而不是宣称任务必定完成。FCU 仍不走旧 waypoint 自动重试路径。
+- 更新必须停机并成套重启 trigger/bridge/pump；不得混用新旧版本进程。QGC 和飞控的命令号、22 个遥测字段保持不变。
+
+### safety1 本地采样事务
+
+- Web/trigger 经 `/usv/control_command` 的 `automation_start` 同步提交步骤、来源、`attempt_id`，FCU 来源另带 `sample_id`。泵控在同一控制锁内验证、装载、启动；失败不启动旧配置。
+- 内部收尾使用 `automation_cleanup`，payload 带 `attempt_id`（可附 reason），在同一控制锁内校验归属并停止全部输出。结果回显 ID 和 `cleanup=stopped/failed/superseded`，仅无会话故障的 stopped 为成功；superseded 不触碰新 owner，失败锁存并停止 MCU 心跳续约。人工 31011/STOPALL 保持全局停止语义。
+- `/usv/automation_steps` 的 `transaction_only=true` 消息仅供观察，不装载；普通步骤消息在自动化运行/暂停期间被拒绝。
+- 启动必须消费一次新装载且未过期的 `attempt_id` 配置；旧 `/usv/automation_start` 不能直接重放无 owner 或已用过的配置。自定义 ROS 调试客户端也需提供 ID 并续约 owner。
+- trigger 在同一 `/usv/trigger_status` 发布流中先发 `sampling_context:<JSON>`，再发 `sampling_started`；Web 以该上下文归档，不再从航点存在与否猜来源。
+- 终态以 `/usv/automation_status.sampling_context` 的 attempt_id/source/FCU sample_id 关联；旧或无 ID 终态不能结束新 owned 采样。启动 ACK 前的匹配终态先缓存，启动获准后按 started→terminal 顺序处理；启动拒绝优先。
+- Web 的记录窗口准备和终态清理使用同一生命周期锁；网络启动 RPC 不持此锁。拒绝/取消启动只回滚本次窗口和本次新建文件，不关闭既有 survey/lab 文件；全局停止先发硬件 RPC，再处理记录 I/O。
+- 走航停止取消整个调度（含两次采样间隔），不会自动启动下一轮。明确恢复需要重新开始走航。
+- `/usv/sampling_owner` 每秒续约本地 `attempt_id`；有 ID 的自动化超过 5 秒无匹配 owner 心跳则取消并锁存 `owner_lost`。旧 ID 心跳不续约新采样。Web 端以 2 Hz 续约自身启动的任务。
+- 预启动进样绑定同一 attempt；走航采样间隔仍续约进样 owner，泵端在进样开启而引擎空闲时也检查 owner，避免孤儿进样。attempt ID 是关联标识，不是权限凭证。
+- `STOP`、`STOPALL`、四轴旧停止文本、`manual_stop_all`、Web `/api/motor/stop` 均取消自动化并停止全部输出。重连先取消旧事务，禁止跨设备连接延续采样。
+- 分光无效帧立即清除旧有效平均值；泵控和 bridge 默认 2 秒超时置无效，bridge 健康值超过 5 秒恢复未知。有效性与链路在线分别判定。
+
+### safety1 Web 访问
+
+- HTTP API 写操作默认仅允许回环地址；远程监控仍可读取。设置进程环境 `USV_WEB_CONTROL_TOKEN`（至少 16 字符）后，所有 API 写操作需要该令牌。
+- 支持 `Authorization: Bearer ...` 或 HTTP Basic（用户名 `operator`、密码为令牌）；浏览器可先访问 `/api/control/auth` 完成认证。令牌不写配置文件、不回传、不记录日志。
+- 拒绝跨源/跨站写请求；Socket.IO 使用同源默认值。经代理时不能将远端伪装成无认证的回环请求；代理部署也必须配置令牌。
+- HTTP Basic/Bearer 不提供传输加密。仅在受控网络使用，远程链路需 TLS/VPN；只读数据同样需要部署层访问隔离。
 
 ## Web API / Socket.IO
 
@@ -143,6 +180,12 @@ Updated: 2026-06-19
 - 这些计算只在 ROS/Web 承载；ArduPilot、DetFirmware、QGC 不参与液滴生成、surface 计算或科研绘图。
 
 ## 检测装置串口协议
+
+safety1 成套更新要求：身份响应须包含 `CAP=WATCHDOG1`。上电禁止控制命令，先 `WATCHDOG:ARM`（先停止全部输出）再开始会话；ROS/Windows 每 500 ms 发 `WATCHDOG:KEEPALIVE`。超过 3000 ms 无心跳时停止 PID、校准、PID 测试、开环电机及进样泵，保持故障锁存。迟到心跳不解锁；重新连接/显式 ARM 后需重新发起任务。`STOPALL` 无条件停全部输出。诊断查询和停止命令不依赖 ARM。
+
+分光状态 bit4 (`0x10`) 表示压力测试合成帧，bit0 清零；接收端同时检查 bit4，不能仅按 bit0 判有效。帧长度不变。ROS 不把测试帧写入真实采样窗口；Windows 标记为无效。该标记不同于 ROS Lab 的显式模拟数据源。
+
+ROS/Windows 混合串口解析器均保留读取块末尾单独的 `0x55`，避免帧头跨读取边界时丢帧；联合黄金帧回归覆盖分片、坏校验与测试位。
 
 | 项 | 当前值 |
 |---|---|

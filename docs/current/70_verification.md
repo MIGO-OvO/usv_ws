@@ -63,6 +63,52 @@ Updated: 2026-06-19
 | 完成通知 | bridge 日志、固件行为 | ROS 发 `USV_DONE`，固件继续 mission script |
 | 失败策略 | 配置 `HOLD/SKIP/ABORT` | 行为与配置一致 |
 
+## FCU 采样结果安全回归
+
+离线：在 `src/usv_ros` 执行 `python3 -m unittest discover -s tests -p 'test_fcu_sampling_result.py'`。测试使用真实 trigger/bridge 方法和模拟传输，不连接设备。
+
+现场需同步记录 `/usv/sampling_result`、`/usv/trigger_status`、`/mavros/state` 与 MAVLink 消息：
+
+| 场景 | 通过标准 |
+|---|---|
+| 正常完成 | 同 ID `succeeded` 后才有 `USV_DONE`；重复结果不重复放行 |
+| 进样启动失败、自动化启动失败、PID 超时 | HOLD/ABORT 下为 `failed`，无 `USV_DONE`，记录窗口结束；单独确认实际 HOLD |
+| QGC 31011、Web 自动化停止 | `cancelled`，无 `USV_DONE`；停止服务期间到达的 finished 不可覆盖取消 |
+| 明确 SKIP | 结果为 `skipped` 而非成功，允许同 ID `USV_DONE` |
+| 重复触发、旧 ID/非法/非 FCU 结果 | 不重复采样，不释放当前新 ID；新 ID 清除未发送的旧完成通知 |
+| 普通 sampling_stopped | 只关闭记录，不生成完成通知 |
+
+必须停机更新并成套重启 trigger/bridge/pump。离线测试不能证明实际船态、跨重启 ID 复用或无线端到端送达；safety1 的超时/失联 HOLD 必须补 SITL 和实船验收。
+
+## safety1 安全回归与发布门槛
+
+离线命令（在各仓库根目录）：
+
+- ROS：`python -B -m unittest discover -s tests -p 'test_system_safety_contract.py'`、`test_sampling_context_contract.py`、`test_web_control_access.py`，再跑全量 `test_*.py`。
+- 串口联合黄金帧：ROS 下 `python -B -m unittest discover -s tests -p test_detector_protocol_contract.py`；完整工作区及 PySide6 可用时，将同一有效/测试/坏校验帧分片送入 ROS 和 Windows 的真实解析器比较。
+- ArduPilot（Linux/WSL）：`python3 -B tests/test_usv_sampling_safety.py`，执行真实 verifier 函数的宿主 C++ 回归；不是 SITL。另按 runbook 编译目标固件。
+- 隔离 SITL：在 ArduPilot 仓库构建 Rover 后运行 `python3 -B tests/check_usv_sitl_sampling.py --binary build/usv-safety-sitl/sitl/bin/ardurover --scenario all`，按实际构建目录调整路径。脚本创建私有仿真进程和回环 UDP（默认实例178），不连接既有飞控，检查成功/取消/超时/伴随失联/MANUAL接管/RTL接管六场景，并断言同 ID 失败通知、时间窗与迟到 DONE 后不推进。
+- DetFirmware：`python -m pytest tests -q`；Linux/WSL `python3 -B tests/test_control_watchdog_native.py`；`pio run -e nodemcu-32s`。源码测试不替代实际电机停机测试。
+- Windows：`python -m pytest tests -q`；QGC：`python -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`。
+- 总仓库：`python docs/tools/check_workspace_compatibility.py`、`python -m unittest discover -s docs/tools`。
+
+必须人工/台架验收：
+
+| 场景 | 必须观测 |
+|---|---|
+| AUTO 内采样超时、bridge 断连、ROS 失败、取消 | 飞控实际 HOLD；不推进后续航点；检测输出停止；无成功采样结果（记录文件结束不等于采样成功） |
+| 人工切 MANUAL/RTL 后迟到失败 | 取消旧采样，保留操作者选择的飞行模式 |
+| 明确 SKIP | 只在同 ID `skipped` 后放行；超时/失联本身不算 SKIP |
+| USB 拔除、控制进程终止、Windows UI 卡死 | ESP32 约 3 秒心跳期限后停止全部执行器；迟到心跳/旧运动命令不复位锁存 |
+| trigger/Web owner 进程终止 | pump 约 5 秒后取消本次自动化；FCU owner 丢失触发 `USV_FAIL`；重启不续跑旧步骤 |
+| 校准/PID 测试/开环运行中各停止入口 | STOPALL、Web 急停、QGC 停采样均不产生后续动作；暂停不能被错误转成完成 |
+| 运行中重连 | 原采样取消；新连接 ARM 前停输出；不得返回旧任务 succeeded |
+| ADS 停流/错误/FULL 压测 | 有效位及时清零；测试帧不进入真实记录；基线不得使用过期测量 |
+| 两个来源同时启动/迟到步骤 | 恰好一个启动成功；执行其提交的配置和 attempt_id；另一个明确拒绝 |
+| 整船重启/丢失 USV_DONE | 不自动将旧 ID 放行；人工确认当前船态与采样状态；本版本尚无跨重启交付保证 |
+
+验收记录须含五端提交号、固件/应用产物 SHA-256、配置快照、事件日志和实际执行器证据。不得仅凭通过源码契约检查标记为可上船。
+
 ## 检测装置验证
 
 | 项 | 方法 | 通过标准 |
