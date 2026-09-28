@@ -79,6 +79,8 @@ Updated: 2026-06-19
 | `USV_PKT` | bridge 发送包计数 |
 | `USV_STEP` | 当前自动化步骤 |
 | `USV_STOT` | 自动化总步骤 |
+| USV_LOOP | 当前自动化循环（从 1 起） |
+| USV_LTOT | 总循环数（无限循环为 0，QGC 显示 x/∞） |
 | `USV_SCNT` | 采样计数 |
 | `USV_PERR` | PID 误差 |
 | `USV_PMOD` | PID 模式 |
