@@ -25,6 +25,7 @@ Updated: 2026-06-19
 | `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | COMMAND_ACK 队列 |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
 | `/usv/sampling_result` | `String(JSON)` | trigger -> bridge | FCU 结果：`source=fcu`、`sample_id`（整数 1..65535）、`outcome`、`reason`；非 latched |
+| `/usv/sample_record` | `String(JSON)` | trigger -> 记录消费者 | 采样终态 SampleRecord：UUID sample_id、开始 GPS 快照、起止时间、光谱/水质；非 latched，详见 `80_sample_gps_binding.md` |
 | `/usv/mission_status` | `String` | trigger -> bridge | 状态码来源 |
 | `/usv/automation_status` | `String(JSON)` | pump -> bridge/Web | 自动化运行、暂停、步骤和 PID 状态 |
 | `/usv/pump_command` | `String` | trigger/Web -> pump | 下发检测装置文本命令 |
@@ -95,6 +96,8 @@ Updated: 2026-06-19
 | `USV_DONE` | 仅在匹配 ID 的 `succeeded` 或明确 `skipped` 结果后，ROS 通知固件结束采样等待 |
 
 ### FCU 采样结果约束
+
+- 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。真实采样默认要求有效 GPS 且源时间年龄 <=2 秒；开始冻结位置，结束不回填。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。当前 MAVLink/QGC 不原子传输样本点，WQ_SAMPLE_POINT 仅为待三端实现的设计草案。
 
 - `sampling_stopped` 只关闭 Web 记录生命周期，不再触发 `USV_DONE`。
 - `outcome` 仅接受 `succeeded/failed/cancelled/skipped`。失败、取消、非 FCU 来源、ID 不匹配或非法结果均不放行。
