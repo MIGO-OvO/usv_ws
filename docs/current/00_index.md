@@ -13,6 +13,7 @@ Updated: 2026-05-20
 5. `50_build_update_runbook.md`：更新、构建、运行、部署。
 6. `60_source_map.md`：关键源码位置和职责边界。
 7. `70_verification.md`：静态、联调、现场验证矩阵。
+8. `80_sample_gps_binding.md`：SampleRecord、开始 GPS 快照、准入约束和现场验收。
 
 ## 按任务查文档
 
