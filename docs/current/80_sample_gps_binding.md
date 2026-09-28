@@ -5,7 +5,6 @@ Updated: 2026-09-28
 ## 范围与调用链
 
 现场入口：QGC 手动 31010、FCU `USV_SMPL`、可选 waypoint 自动触发、走航调度、lab_real、Web `/api/mission/start`。
-trigger 的现场入口在首次进样/自动化调用前验证 GPS 并建立 acquisition context；Web 直接启动使用同一个共享校验器。
 一轮自动化事务（包含其配置的步骤/loop）为一次采样；原始分光帧和模拟液滴是该记录的子数据，不分别创建 SampleRecord。
 
 现有闭环保持：QGC → 飞控命令/mission script → bridge → trigger → pump；
@@ -41,7 +40,11 @@ Web 直接启动的记录通过现有 samples API 读取；它不经过 trigger 
 
 ## GPS 准入与边界
 
-- `survey_require_gps` 默认 true；`survey_max_position_age_s` 默认 2；新增 `sampling_max_position_age_s` 默认 2（所有现场入口硬门槛）。
+trigger 的现场入口在首次进样/自动化调用前验证 GPS 并建立 acquisition context。Web 直接启动默认使用同一个校验器，但自动化页面可关闭“启动时要求 GPS”：仅本页启动请求携带 `require_gps=false`，刷新页面恢复开启，不改变 FCU、走航和实验航线的 GPS 门槛。
+
+Web 关闭 GPS 要求后仍优先绑定有效硬件定位；缺失、失锁或过期时记录空坐标，`position_source=web_no_gps`、`simulated=false`，不绑定模拟船位、不事后回填采样起点，不作为地图定位点。此选项执行真实硬件动作，不是仿真模式。`GET /api/gps` 提供硬件定位有效性、拒绝原因、WGS84 经纬度、海拔和数据年龄，自动化页每秒刷新。
+
+- `survey_require_gps` 默认 true；`survey_max_position_age_s` 默认 2；`sampling_max_position_age_s` 默认 2（除上述 Web 显式无 GPS 测试外，现场入口的硬门槛）。
 - `survey_require_gps=false` 仅保留旧配置兼容性，不能绕过现场采样硬门槛；采样年龄设 0、负数、NaN 时回退 2 秒，不代表无限期有效。
 - 纬经度必须有限且在合法范围，NavSatFix status >= 0，源 stamp > 0。
 - 接收时用 ROS 时钟计算源年龄，之后用 monotonic 计算缓存驻留时间，两者之和 <= 门槛；旧源数据即便刚收到也拒绝。缺时间戳、未来时间戳、无 fix、非法坐标均拒绝。
