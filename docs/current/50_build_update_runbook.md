@@ -12,7 +12,7 @@ Updated: 2026-05-20
 
 当前清单 schema v2 的文本源码哈希先将 CRLF 规范化为 LF，避免相同提交在 Windows/Linux 检出时误报。归档的 v1 工作树快照保留历史意义，不作为当前版本匹配清单；提交后重新生成 v2 候选，仍须独立记录现场验收。
 
-远程 Web 控制需通过服务环境配置 `USV_WEB_CONTROL_TOKEN`（至少 16 字符，随机生成并安全分发，不提交 Git）；未配置时远端只能监控。浏览器先打开 `http://船载地址:5000/api/control/auth`，用户名 `operator`，密码为该令牌，再使用控制台。通过 HTTPS/VPN 保护非受控链路；令牌不加密 HTTP。
+船载热点/LAN 的 Web 控制默认无需登录，前端可直接执行分光、泵控、自动采样；同源/跨站防护保留。需要认证时，在服务进程环境设置 `USV_WEB_REQUIRE_AUTH=1` 和 `USV_WEB_CONTROL_TOKEN`（至少 16 字符，随机生成并安全分发，不提交 Git），然后重启 Web 服务；启用认证但令牌缺失或过短会拒绝启动，仅配置 token 不启用认证。认证模式下浏览器先打开 `http://船载地址:5000/api/control/auth`，用户名 `operator`，密码为该令牌，再使用控制台。默认模式允许任何可达客户端控制，非可信网络应启用认证、网络访问隔离及 HTTPS/VPN；令牌不加密 HTTP。
 
 ```bat
 bootstrap_workspace.bat

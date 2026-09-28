@@ -128,9 +128,9 @@ Updated: 2026-06-19
 
 ### safety1 Web 访问
 
-- HTTP API 写操作默认仅允许回环地址；远程监控仍可读取。设置进程环境 `USV_WEB_CONTROL_TOKEN`（至少 16 字符）后，所有 API 写操作需要该令牌。
+- HTTP API 写操作默认允许船载热点/LAN 客户端无需登录直接调用。仅在进程环境 `USV_WEB_REQUIRE_AUTH=1` 时启用认证，所有 API 写操作（含本机）需要 `USV_WEB_CONTROL_TOKEN`（至少 16 字符）；缺失或过短时拒绝启动。仅设置 token 不启用认证，环境变更需重启 Web 服务；普通只读 API 仍无需认证。
 - 支持 `Authorization: Bearer ...` 或 HTTP Basic（用户名 `operator`、密码为令牌）；浏览器可先访问 `/api/control/auth` 完成认证。令牌不写配置文件、不回传、不记录日志。
-- 拒绝跨源/跨站写请求；Socket.IO 使用同源默认值。经代理时不能将远端伪装成无认证的回环请求；代理部署也必须配置令牌。
+- 两种模式均拒绝跨源/跨站写请求；Socket.IO 使用同源默认值。默认模式允许任何可达客户端控制，同源检查不是身份认证；非可信网络或对外代理部署应显式启用认证并限制网络访问。
 - HTTP Basic/Bearer 不提供传输加密。仅在受控网络使用，远程链路需 TLS/VPN；只读数据同样需要部署层访问隔离。
 
 ## Web API / Socket.IO
