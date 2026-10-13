@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-12
+Updated: 2026-10-13
 
 ## ROS Launch
 
@@ -66,9 +66,10 @@ Updated: 2026-10-12
 | 31018 | 分光采集开始 | `mavlink_trigger_node.py` |
 | 31019 | 分光采集停止 | `mavlink_trigger_node.py` |
 
-手动点采样 `31010(param2=0)` 使用 Web 自动化页保存的 `automation_policy.require_gps`
-（默认 true）。显式关闭后允许无 GPS 启动；缺失、失锁或过期定位记录为空坐标、
-`position_source=manual_no_gps`、`simulated=false`，不作为地图定位点。FCU 航线与走航采样仍要求有效 GPS。
+所有真实载荷采样入口均允许无 GPS 启动，包含手动 `31010(param2=0)`、Web、FCU、waypoint、走航和 lab_real。
+旧 `automation_policy.require_gps`、请求 `require_gps`、`survey_require_gps` 和实验 `allow_no_gps` 均不生效。
+缺失、失锁或过期定位记录为空坐标，`position_source=<source>_no_gps`、`simulated=false`，不作为地图定位点。
+走航无定位时按时间间隔采样，仅在定位有效时检查最小距离。硬件预检、速度和分光条件继续执行。
 `COMMAND_ACK.result`：接受为 `0`、忙碌暂拒为 `1`、执行失败为 `4`；`5` 是执行中，不能作为失败终态。
 
 ## MAVLink Named Values
@@ -104,7 +105,7 @@ Updated: 2026-10-12
 
 ### FCU 采样结果约束
 
-- 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。真实采样默认要求有效 GPS 且本地接收年龄 <=2 秒；Web 自动化和 QGC 手动点采样可通过上述设置关闭 GPS 要求。开始冻结位置，结束不回填。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。当前 MAVLink/QGC 不原子传输样本点，WQ_SAMPLE_POINT 仅为待三端实现的设计草案。
+- 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。GPS 仅用于可选开始位置：有效且本地接收年龄 <=2 秒时冻结，其他情况保留空坐标，不阻止采样或单独触发失败/HOLD，结束不回填。飞控导航的定位条件独立于载荷采样。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。当前 MAVLink/QGC 不原子传输样本点，WQ_SAMPLE_POINT 仅为待三端实现的设计草案。
 
 - `sampling_stopped` 只关闭 Web 记录生命周期，不再触发 `USV_DONE`。
 - `outcome` 仅接受 `succeeded/failed/cancelled/skipped`。失败、取消、非 FCU 来源、ID 不匹配或非法结果均不放行。
