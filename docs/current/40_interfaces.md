@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-06-19
+Updated: 2026-10-13
 
 ## ROS Launch
 
@@ -67,6 +67,10 @@ Updated: 2026-06-19
 | 31019 | 分光采集停止 | `mavlink_trigger_node.py` |
 
 ## MAVLink Named Values
+
+QGC 载荷响应期限：分光启动 `31018` 为 40 秒；停止类 `31011/31016/31019` 为 15 秒，发送层与 QML 面板一致。启动成功仍以配置回显、START ACK 和有效首帧为准；停止成功需设备停止确认。期限不等于固定作业延迟。
+
+ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服务初始化不阻塞采样 owner 续约。自动化准备期间使用现有 `USV_STAT=8`（准备/稳定等待），QGC 主动作提供停止准备，准备结束后进入采样状态才可暂停。QGC 手动点采样采用 Web 自动进样泵策略的速度，进样泵在准备完成后开启。
 
 固件缓存字段：`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`；固件转发：`ardupilot-usv/Rover/sensors.cpp`。
 

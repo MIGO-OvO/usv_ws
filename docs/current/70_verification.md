@@ -1,6 +1,6 @@
 # 验证矩阵
 
-Updated: 2026-06-19
+Updated: 2026-10-13
 
 ## 静态验证
 
@@ -48,12 +48,17 @@ Updated: 2026-06-19
 | router 启动 | `usvon` 后 `usvstatus` | router pid 存在，TCP 5760 可用 |
 | MAVROS 连接 | `rostopic echo -n 1 /mavros/state` | `connected: True` |
 | QGC 手动命令 | QGC 发送 `COMMAND_LONG 31010` | `/usv/mavlink_cmd_rx` 收到，trigger 发布状态，ACK 返回 |
+| QGC 冷启动 | ROS 启动后立即点击启动信号 | bridge 不等待飞控心跳才开始接收；采样 owner 在 MAVROS 初始化等待期间仍每秒续约；配置回显和有效首帧后才成功 |
+| QGC 点采样进样 | Web 自动进样策略设不同于 `default_speed` 的速度，QGC 启动点采样 | 准备完成后按策略速度开启进样泵；准备时不提供暂停，主按钮可停止准备 |
+| QGC 普通停止 | 准备、采样、暂停阶段分别点击 `31011` | 取消当前流程、停止全部泵输出；设备确认后 ACK 返回；不依赖紧急停止；Web 记录窗口关闭 |
 | 校准命令 | QGC 发送 `31014` | `/usv/pump_command` 出现 `CALXYZA` |
 | 遥测字段 | 运行 bridge | QGC 显示 22 字段；固件 2 Hz 转发 |
 | 健康遥测 | 运行 system health + bridge | QGC 显示 `USV_JTMP/ETMP/JCPU/JMEM/EHEAP` 对应 Fact |
 | 电台链路 | RADIO_STATUS 输入 | `/usv/radio_status` 有 rssi/remrssi/noise 等字段 |
 
 ## 采样闭环验证
+
+QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s tests -p test_qgc_payload_startup.py`；QGC 下 `python -B -m unittest discover -s custom/tests -p test_usv_qgc_contract.py` 和 `python -B custom/tests/verify_workflow_ui.py`。真实停泵、冷启动延迟和无线 ACK 往返仍需上述台架步骤。
 
 | 步骤 | 观测点 | 通过标准 |
 |---|---|---|
