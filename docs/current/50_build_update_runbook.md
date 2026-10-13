@@ -72,7 +72,13 @@ usvoff
 usvdeploy
 ```
 
-`usvdeploy` 语义：stop -> `git pull --ff-only` -> `catkin_make` -> start。系统运行时 `usvupdate/usvbuild` 应拒绝执行。
+`usvdeploy` 语义：stop -> 自动 stash 本地改动 -> `git pull --ff-only` -> 脚本赋权 -> `catkin_make` -> start。
+`usvupdate` 共用更新逻辑：工作区不干净时，先用 `git stash push --include-untracked` 备份
+已跟踪文件的工作区/暂存区改动及未跟踪文件；Git 忽略的数据、日志、缓存不纳入 stash。
+备份带时间标记并保留，更新后不自动恢复，命令会打印固定备份提交号和 `stash apply --index` 恢复命令。
+已有 stash 不删除，干净工作区不创建新备份；备份/拉取失败则停止后续部署。
+同步目标为当前分支配置的远端上游，本地已提交的分叉仍由 `--ff-only` 拒绝，不自动丢弃提交。
+系统运行时 `usvupdate/usvbuild` 应拒绝执行。详细备份查看与恢复步骤见 `src/usv_ros/README.md`。
 
 离线逻辑验证（无需硬件，在 `src/usv_ros` 目录）：
 
