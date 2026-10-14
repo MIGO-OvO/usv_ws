@@ -22,6 +22,7 @@ Updated: 2026-10-13
 | Python 语法 | `python3 -m py_compile src/usv_ros/scripts/*.py` | 无语法错误 |
 | Launch 参数 | `roslaunch usv_ros usv_bringup.launch --dump-params` | 参数可展开 |
 | 单元测试 | `python3 -m unittest discover -s src/usv_ros/tests -p 'test_*.py'` | 全部通过 |
+| 无 GPS 采样 | `python3 -B -m unittest discover -s src/usv_ros/tests -p 'test_sampling_without_gps.py'` | 缺失、失锁、过期 GPS 均允许真实采样；旧要求字段不生效；FCU 完成结果保留匹配 ID；空坐标不回填 |
 | lab_sim 库编译 | `python3 -m py_compile src/usv_ros/scripts/lib/lab_sim/*.py` | 无语法错误 |
 | 前端构建 | `cd src/usv_ros/frontend && npm run build` | 构建成功；产物写入 `static/dist` |
 | 系统健康节点 | `rostopic echo -n 1 /usv/system_health` | Jetson、detector、ROS 节点字段存在 |
@@ -64,6 +65,7 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 |---|---|---|
 | 固件触发 | `NAV_SCRIPT_TIME(param1=1)` | ROS bridge 收到 `USV_SMPL` |
 | ROS 采样 | `/usv/trigger_status`、`/usv/pump_status` | 出现 `sampling_started`，状态进入采样并执行序列 |
+| 无定位测试 | 无 fix 时发手动/FCU/Web/走航采样请求 | 硬件预检通过后正常启动，无 `sampling_rejected:gps_*`；记录坐标为 null，旧 GPS 开关不生效 |
 | QGC/Web 记录 | QGC 采样数据页、Web 数据中心 | `USV_SCNT` 递增，Web 新任务记录数据点增长 |
 | 完成通知 | bridge 日志、固件行为 | ROS 发 `USV_DONE`，固件继续 mission script |
 | 失败策略 | 配置 `HOLD/SKIP/ABORT` | 行为与配置一致 |

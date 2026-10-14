@@ -1,6 +1,6 @@
 # 采样记录与开始位置绑定
 
-Updated: 2026-09-28
+Updated: 2026-10-13
 
 ## 范围与调用链
 
@@ -23,11 +23,11 @@ Web 直接启动的记录通过现有 samples API 读取；它不经过 trigger 
 | `record_schema_version` | 1；旧窗口 `schema_version`/`sample_windows_schema_version` 保持 1 |
 | `sample_id` | UUID4 hex，全局唯一；context 中称 `record_id`，不覆盖旧 FCU ID |
 | `timestamp_start` / `timestamp_end` | Unix 秒；开始为主机提交采样的时刻，结束前为 null |
-| `latitude` / `longitude` | 开始位置，WGS84 度；绝不从结束位置补写 |
+| `latitude` / `longitude` | 可选开始位置，WGS84 度；无有效定位为 null，绝不从结束位置补写 |
 | `altitude` | NavSatFix 高度（米，通常 WGS84 椭球高）；缺失为 null，不假称海拔 |
 | `gps_timestamp` | NavSatFix `header.stamp` 的 ROS 秒值，不假称原始 GNSS UTC；仿真无实测 GPS 时间时为 null |
-| `position_age_s` | 开始时 GPS 源时间年龄，冻结后不继续增长 |
-| `position_source` / `simulated` | `gps`/false 或 `lab_sim`/true；历史无上下文数据标 `legacy_unknown` |
+| `position_age_s` | 开始时 GPS 本地接收年龄，冻结后不继续增长 |
+| `position_source` / `simulated` | `gps`/false、`<source>_no_gps`/false 或 `lab_sim`/true；历史无上下文数据标 `legacy_unknown` |
 | `waypoint_id` | 已知关联航点；未知为 null。旧 `waypoint_seq` 的兼容语义保留 |
 | `mission_id` | Web 持久化时绑定归档任务 ID；trigger 没有获知任务 ID 时为 null，不用 FCU script ID 冒充 |
 | `mavlink_sample_id` | 可选的 1..65535 FCU 握手编号，不具有跨任务唯一性 |
@@ -38,21 +38,20 @@ Web 直接启动的记录通过现有 samples API 读取；它不经过 trigger 
 `gps_end` 仍可用于诊断漂移，但不作为采样点位置；地图摘要点通过冻结 GPS 重建 WGS84/GCJ02 对，轨迹本身仍实时更新。
 历史记录不迁移、不臆测开始 GPS；新旧数据可以并存。
 
-## GPS 准入与边界
+## 可选 GPS 位置与边界
 
-trigger 的现场入口在首次进样/自动化调用前验证 GPS 并建立 acquisition context。Web 直接启动默认使用同一个校验器，但自动化页面可关闭“启动时要求 GPS”：仅本页启动请求携带 `require_gps=false`，刷新页面恢复开启，不改变 FCU、走航和实验航线的 GPS 门槛。
+所有真实采样入口在首次进样/自动化调用前建立 acquisition context，GPS 仅作为可选位置元数据，缺失、失锁或过期均不阻止启动。旧配置 `automation_policy.require_gps`、`survey_require_gps`、实验 `allow_no_gps` 和 Web 请求 `require_gps` 均被忽略；对应界面开关已移除。launch 保留默认 false 的 `survey_require_gps` 参数兼容旧启动命令，但不再传给节点。
 
-Web 关闭 GPS 要求后仍优先绑定有效硬件定位；缺失、失锁或过期时记录空坐标，`position_source=web_no_gps`、`simulated=false`，不绑定模拟船位、不事后回填采样起点，不作为地图定位点。此选项执行真实硬件动作，不是仿真模式。`GET /api/gps` 提供硬件定位有效性、拒绝原因、WGS84 经纬度、海拔和数据年龄，自动化页每秒刷新。
+有效硬件定位仍优先冻结；其他情况记录空坐标，`position_source=<source>_no_gps`（例如 `web_no_gps`、`manual_no_gps`、`fcu_no_gps`），均为 `simulated=false`。不绑定模拟船位、不事后回填采样起点、不作为地图定位点。`GET /api/gps` 继续提供硬件定位有效性、原因、WGS84 经纬度、海拔和数据年龄，用于诊断。
 
-- `survey_require_gps` 默认 true；`survey_max_position_age_s` 默认 2；`sampling_max_position_age_s` 默认 2（除上述 Web 显式无 GPS 测试外，现场入口的硬门槛）。
-- `survey_require_gps=false` 仅保留旧配置兼容性，不能绕过现场采样硬门槛；采样年龄设 0、负数、NaN 时回退 2 秒，不代表无限期有效。
-- 纬经度必须有限且在合法范围，NavSatFix status >= 0，源 stamp > 0。
-- 接收时用 ROS 时钟计算源年龄，之后用 monotonic 计算缓存驻留时间，两者之和 <= 门槛；旧源数据即便刚收到也拒绝。缺时间戳、未来时间戳、无 fix、非法坐标均拒绝。
-- 无效定位消息替换旧缓存，防止失锁后沿用旧有效点。GPS 正好 2 秒有效，超过 2 秒拒绝。
-- waypoint 在 HOLD/稳定等待之后冻结；manual/FCU 在进样前冻结；每轮 survey 单独冻结/生成 UUID；lab_real 永远使用硬件 GPS，不使用虚拟航点位置。
-- lab_sim 使用显式模拟坐标，不要求硬件 GPS；模拟走航优先使用 lab status 船位，兼容原有可用位置输入。仿真记录明确标 simulated，不能冒充现场点。
-- 采样期间船位移动或 GPS 失锁，不改已冻结的位置；下一次采样重新检验。无 GPS 的 FCU 启动直接失败/HOLD，即使 on_fail=SKIP 也不发成功放行。
-- bench 调试的低层电机、进样、分光连续流及直接 ROS pump 控制服务不是地理采样 API，本次不禁止这些调试接口；正式现场采样须走上述入口。ROS 控制网仍需访问隔离。
+- `sampling_max_position_age_s` 默认 2，决定开始位置是否可记入元数据；`survey_max_position_age_s` 默认 2，进一步约束距离计算可用的位置年龄。这些参数不限制采样启动。采样年龄设 0、负数、NaN 时回退 2 秒，过期定位记为空坐标。
+- 记录有效坐标时要求经纬度有限且在合法范围、NavSatFix status >= 0、本地 monotonic 接收时间存在且不在未来、接收年龄未过期；无效时采样继续。FCU/MAVROS header.stamp 保留作诊断，不因墙钟偏差丢弃本地刚收到的有效定位。
+- 无效定位消息替换旧缓存，防止失锁后沿用旧有效点。默认正好 2 秒可记为有效位置，超过 2 秒记为空坐标。
+- waypoint 在 HOLD/稳定等待之后绑定位置；manual/FCU 在进样前绑定；每轮 survey 单独生成 UUID；lab_real 只使用可选硬件 GPS，不使用虚拟航点位置。
+- 走航无可用定位时按时间间隔采样，并清除旧距离锚点；有有效定位时执行最小距离筛选。速度、分光有效性、泵预检、故障、owner 和停止确认条件继续执行。
+- lab_sim 使用显式模拟坐标，不要求硬件 GPS；模拟走航优先使用 lab status 船位。生成模拟液滴需要有效模拟坐标，仿真记录标记 simulated，不能冒充现场点。
+- 采样期间船位移动或 GPS 失锁，不改已冻结的位置；无坐标记录即使随后恢复 GPS 也不回填起点。无 GPS 的 FCU 采样按真实执行结果回报，同 ID 正常完成后才发 USV_DONE。
+- 飞控导航自身的定位条件独立于载荷采样；本次移除的是 ROS/Web 载荷采样的 GPS 条件。
 
 ## MAVLink / QGC 审查与最小扩展方案（未启用）
 
@@ -85,33 +84,35 @@ Web 关闭 GPS 要求后仍优先绑定有效硬件定位；缺失、失锁或�
 
 ## 涉及文件与原因
 
-- `src/usv_ros/scripts/lib/sample_recording/record.py`：共享 GPS 准入、不可回填快照和 SampleRecord 构造。
+- `src/usv_ros/scripts/lib/sample_recording/record.py`：共享可选位置绑定、不可回填快照和 SampleRecord 构造。
 - `scripts/mavlink_trigger_node.py`：所有现场/实验入口绑定、模拟船位订阅、每轮 survey 唯一记录、关联结果发布。
 - `scripts/lib/sample_recording/models.py`、`storage.py`：窗口复用标准字段、UUID、防重复建档、原始统计与测量保留。
-- `scripts/web_config_server.py`：直接启动 GPS 门槛、窗口/地图冻结位置、模拟事件记录、真实工作曲线结果。
-- `launch/usv_bringup.launch`：安全默认值与可配置现场 freshness。
+- `scripts/web_config_server.py`：无定位直接启动、弃用 GPS 策略字段兼容、窗口/地图冻结位置、模拟事件记录、真实工作曲线结果。
+- `launch/usv_bringup.launch`：旧启动参数兼容与位置元数据的年龄参数。
 - `tests/test_sample_gps_binding.py`、`gps_fixtures.py`：GPS/时间/移动/一致性/去重验证。
-- `tests/test_sampling_context_contract.py`：Web 准入、真实归档和同流模拟测量落盘验证。
+- `tests/test_sampling_without_gps.py`：各真实入口无定位/失锁/过期启动、旧配置不生效、FCU 同 ID 成功完成与走航距离回退验证。
+- `tests/test_manual_sampling_gps_policy.py`：旧 GPS 策略不限制 QGC 手动采样，空坐标归档和接受/失败/忙碌 ACK 验证。
+- `tests/test_sampling_context_contract.py`：Web 无定位启动、真实归档和同流模拟测量落盘验证。
 - `tests/test_mavlink_command_compat.py`、`test_fcu_sampling_result.py`、`test_sampling_cleanup_ownership.py`、`test_hardware_runtime_sync.py`：旧安全/兼容测试补入有效 GPS 与 ROS 时钟夹具，不移除原有断言。
 - 根 `docs/current/00_index.md`、`40_interfaces.md` 与本文：接口约定和验证步骤。
 
-未修改用户已有的 pump_control_node.py / test_system_safety_contract.py 改动；未修改 ArduPilot、QGC、DetFirmware、Windows 上位机的业务代码或串口协议。
+`pump_control_node.py` 仅移除无作用的实验 GPS 选项；泵安全逻辑保持既有行为。ArduPilot、QGC、DetFirmware、Windows 上位机的业务代码与串口协议不涉及本次修改。
 
 ## 现场验收（先系泊/断开推进输出，再低速受控水域）
 
-1. 成套停止旧 ROS 进程，备份现场配置/数据，同步 usv_ros；Jetson 执行 `python3 -m unittest discover -s tests -p 'test_sample_gps_binding.py'` 和相关采样回归。检查配置/launch 的两个年龄门槛均为 2 秒，真实模式关闭模拟数据源。
-2. 检查 `/mavros/global_position/global`：status >= 0，header.stamp 正常，定位持续更新。确认 ROS/MAVROS 时间同步；不要用反复发布旧 stamp 的定位充当新数据。
+1. 成套停止旧 ROS 进程，备份现场配置/数据，同步 usv_ros（含 `static/dist`）；Jetson 执行 `python3 -B -m unittest discover -s tests -p 'test_sampling_without_gps.py'` 和相关采样回归。成套重启 pump、trigger、bridge、Web，真实模式关闭模拟数据源。
+2. 检查 `/mavros/global_position/global` 和 `/api/gps`：有效且持续更新时可记录位置；无 fix 时仍应能启动载荷采样。定位诊断不能误报为采样启动失败。
 3. 分别用 QGC 手动、NAV_SCRIPT_TIME、Web start、survey 发起采样。对照 `/usv/trigger_status` 中 sampling_context、`/usv/sample_record`（trigger 来源）和 `GET /api/data/mission/<id>/samples`：每轮一个 UUID，起止时间、坐标、age、关联航点、光谱/水质字段齐全，raw 文件可读取。
-4. 在系泊台架停发 GPS 超过 2 秒后重试。确认不启动采样自动化；FCU 返回失败且保持 HOLD、不收到 USV_DONE。恢复 GPS 后可再次启动。另测试 status=-1、旧源 stamp、NaN 和未来 stamp；不要在真实航行中注入假定位。
+4. 在系泊台架停发 GPS 超过 2 秒，或输入 status=-1、NaN、缺失/未来的本地接收时间。各真实采样入口在硬件预检通过后仍应启动，记录空坐标且 `position_source=<source>_no_gps`。恢复 GPS 后已有记录的起点仍为空。旧配置即使保留 `require_gps=true` 或 `survey_require_gps=true` 也不恢复限制；QGC 手动启动回执为 `[31010,0,...]`。FCU 同 ID 采样正常完成后才返回 USV_DONE，失败/取消仍不放行。旧或未来 header.stamp 只作诊断。
 5. 在 A 点启动一次采样，采样过程中缓慢移动到 B 点；记录 latitude/longitude 与 gps_start 必须为 A，gps_end/实时轨迹允许为 B。下一轮 UUID 不同且绑定新的开始位置。
-6. survey 连续执行至少 3 轮，核对 3 个不同 UUID/原始文件，停止/取消后无额外记录或下一轮启动。GPS 丢失期间不允许开启新轮次。
-7. lab_sim 离线运行，与现场 samples API 比较字段集合；检查 simulated=true、position_source=lab_sim、无假 GPS 时间。lab_real 无硬件 GPS 必须拒绝，有硬件 GPS 时不能绑定虚拟船位。
+6. survey 在无 GPS 时连续执行至少 3 轮，核对不同 UUID/原始文件和时间间隔，停止/取消后无额外记录或下一轮启动。恢复定位后检查有效坐标下的最小距离筛选。
+7. lab_sim 离线运行，与现场 samples API 比较字段集合；检查 simulated=true、position_source=lab_sim、无假 GPS 时间。lab_real 无硬件 GPS 时正常启动并记录空坐标，有硬件 GPS 时绑定真实位置，不能绑定虚拟船位。
 8. 测试重复 started/终态、失败、停止、进程重启及网络短断；不能由重复终态放行新 FCU 任务。重启未完成记录按现有 interrupted 语义处理，不伪造成功或结束坐标。
 9. QGC 确认旧电压/吸光度/状态等 22 字段和命令照常工作。样本点尚经 ROS/API 查看，不以 QGC 未实现的扩展消息作为验收项。
 
 ## 已知边界
 
-本地验证：Windows/Python 3.14 分文件扫描 473 个用例，471 通过，2 个既有地图断言失败（后端 Google provider 与测试高德预期不一致；原生缩放 22 与 smoke 的 18 预期不一致，已核对 HEAD）。新增 14 个 GPS 专项测试及 3 个 Web 绑定场景通过；相关采样/握手/清理回归通过。两个 Bash/WSL 脚本测试文件未完成验证，首个调用超时后已停止测试子进程。Python 语法、launch XML、本次改动范围的 diff whitespace 检查通过。没有执行 Qt/飞控/ESP32 编译或真实无人船测试。
+本地验证：Windows/Python 3.14 下，256 个相关 GPS、采样、握手、清理、预检与归档用例全部通过；9 个前端控制/GPS 位置用例通过，`npm run build` 成功并更新 `static/dist`。扩展检查仍有一个既有地图服务商断言失败（实际 Google provider、测试预期高德），已用修改前 HEAD 的服务端源码复现；它不属于 GPS 启动限制。修改脚本的 Python 3.8 语法兼容、launch XML、源码与文档空白检查通过。本次未跑全量 Bash/WSL 测试，未执行 Qt/飞控/ESP32 编译或 Jetson/真实硬件测试。
 
 - Python 离线测试不能替代 ROS 多进程、硬件动作、GNSS 精度、Qt 和飞控编译/无线链路验收。
 - 本次沿用 Web 持久化架构：现场必须运行 Web 记录服务；`/usv/sample_record` 是非 latched ROS 事件，无独立持久化重放队列。Web 掉线/进程崩溃仍可能漏档；UUID 去重不等于跨进程崩溃 exactly-once。
