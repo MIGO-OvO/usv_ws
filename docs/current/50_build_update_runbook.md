@@ -1,6 +1,6 @@
 # 构建、更新、运行 Runbook
 
-Updated: 2026-05-20
+Updated: 2026-10-19
 
 ## 根仓库
 
@@ -155,6 +155,10 @@ cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 | ROS console | 节点实时输出 |
 
 ## 最小现场启动检查
+
+2026-10 跨端版本需成套部署：先停任务并确认执行器安全，备份配置/旧产物/故障证据，再更新 ROS（含 static/dist）、DetFirmware、ArduRover 和 QGC，最后重启并只读核验。ROS 保留请求 SQLite 与 transport 会话文件，QGC 保留 `payload-request-identity.ini`；不要通过删除账本重置编号。旧 QGC 窗口必须退出后再启动新产物，本次 Agent 未替换运行中的窗口，也未烧录设备。
+
+先验证 STOP 与确认状态，再低负载验证准备/采样/失败恢复；检测板仍有独立 30 秒 PID 限时。出现旧动作重放、假成功、停止未确认或持续失联，立即停机并保留日志，回退匹配组合；不能回退到含已知安全缺陷的版本后继续自动采样。`rotate_runtime_logs.py` 默认 dry-run，仅显式 `--rotate` 时采用 10 MiB × 5 的 copytruncate；有微小丢行窗口，不自动处理现场证据。
 
 ```bash
 usvstatus

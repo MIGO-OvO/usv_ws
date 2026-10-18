@@ -1,6 +1,14 @@
 # 验证矩阵
 
-Updated: 2026-10-13
+Updated: 2026-10-19
+
+## 跨端修复验证边界
+
+2026-10-19 本轮按用户要求跳过地图测试，不修改地图功能。可重复入口：ROS `python -B tests/run_non_map_tests.py`，QGC 控制器 Qt Quick Test、真实 Vehicle/StatusText 单测，DetFirmware native/PIO，Rover SITL/Pixhawk6C。结果及版本清单见 `docs/reports/2026-10-18-cross-end-code-repair-plan.md`。
+
+重点覆盖：旧动作取消与重连、STOP 不等长事务/磁盘、当前会话真帧与基线、2 秒失效/10 秒有界恢复、ADS I²C 互斥与真实 POWERDOWN、TCP 背压/部分帧/会话换代、26 字段独立年龄/公平转发、请求持久化与分片重组、校准完成与失败首因、Web 最终结果导出。
+
+所有设备更新、烧录、台架、低剂量及实船测试由操作者执行。需保留独立断电手段并测量真实停机时间；不能把 ACK、离线测试或编译通过当现场验收。地图相关章节保留为后续参考，本轮未执行。
 
 ## 静态验证
 
@@ -10,7 +18,7 @@ Updated: 2026-10-13
 | 归档存在 | `Test-Path docs/archive/2026-05-20-current-pre-restructure` | 返回 true |
 | 本地路径引用 | 手动/脚本检查反引号路径 | 根仓库内路径存在；外部子仓库路径明确 |
 | 旧入口污染 | 搜索旧入口名、旧字段数、旧频率说法 | current 不出现过时说法 |
-| MAVLink 字段 | 对照 `GCS_MAVLink_Rover.cpp`、`sensors.cpp`、`Rover.h`、QGC FactGroup | 22 字段名称一致 |
+| MAVLink 字段 | 对照 `Rover/USVPayload.h`、bridge、QGC FactGroup | 26 字段名称一致 |
 | Mission 采样指令 | 对照 `mode_auto.cpp`、QGC `MavCmdInfoRover.json` | 航线定点采样为 `MAV_CMD_NAV_SCRIPT_TIME`，不使用 mission `31010` |
 | COMMAND_LONG | 对照 `mavlink_trigger_node.py`、`usv_mavlink_router_bridge.py` | 手动 `31010..31019` 一致 |
 | 串口握手 | 对照 `pump_control_node.py`、`DetFirmware/src/main.cpp` | `HELLO?` / `DET_ID` 一致 |
@@ -52,7 +60,7 @@ Updated: 2026-10-13
 | QGC 点采样进样 | Web 自动进样策略设不同于 `default_speed` 的速度，QGC 启动点采样 | 准备完成后按策略速度开启进样泵；准备时不提供暂停，主按钮可停止准备 |
 | QGC 普通停止 | 准备、采样、暂停阶段分别点击 `31011` | 取消当前流程、停止全部泵输出；设备确认后 ACK 返回；不依赖紧急停止；Web 记录窗口关闭 |
 | 校准命令 | QGC 发送 `31014` | `/usv/pump_command` 出现 `CALXYZA` |
-| 遥测字段 | 运行 bridge | QGC 显示 22 字段；固件 2 Hz 转发 |
+| 遥测字段 | 运行 bridge | QGC 显示 26 字段；固件 2 Hz 公平转发，停源后不续旧值 |
 | 健康遥测 | 运行 system health + bridge | QGC 显示 `USV_JTMP/ETMP/JCPU/JMEM/EHEAP` 对应 Fact |
 | 电台链路 | RADIO_STATUS 输入 | `/usv/radio_status` 有 rssi/remrssi/noise 等字段 |
 

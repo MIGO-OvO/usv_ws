@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-13
+Updated: 2026-10-19
 
 ## ROS Launch
 
@@ -85,7 +85,7 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 | `USV_STOT` | 自动化总步骤 |
 | USV_LOOP | 当前自动化循环（从 1 起） |
 | USV_LTOT | 总循环数（无限循环为 0，QGC 显示 x/∞） |
-| `USV_SCNT` | 采样计数 |
+| `USV_SCNT` | 采样启动次数，不是成功次数 |
 | `USV_PERR` | PID 误差 |
 | `USV_PMOD` | PID 模式 |
 | `USV_BSET` | 基线是否已设置 |
@@ -97,15 +97,25 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 | `USV_JCPU` | Jetson CPU 使用率，单位 `%`；未知为 `-1` |
 | `USV_JMEM` | Jetson 内存使用率，单位 `%`；未知为 `-1` |
 | `USV_EHEAP` | ESP32 可用 heap 百分比，单位 `%`；未知为 `-1` |
+| `USV_ADS` | 0 未知、1 停止确认、2 启动中、3 采集中、4 错误、5 停止未确认 |
+| `USV_PROTO` | 当前关联请求协议版本 1；过期/未知不得开放新动作 |
 | `USV_SMPL` | 固件在 `NAV_SCRIPT_TIME(param1=1)` 触发 ROS 定点采样 |
 | `USV_SURV` | 固件触发走航采样开关 |
 | `USV_DONE` | 仅在匹配 ID 的 `succeeded` 或明确 `skipped` 结果后，ROS 通知固件结束采样等待 |
 
+### 关联请求与逐字段新鲜度
+
+常规显示遥测共 26 项；`USV_SMPL/SURV/DONE/FAIL` 是控制事件，不计入显示字段数。ROS 按源回调与字段年龄发送，失效 VLD/BSET/ADS 发 0；飞控每字段 3 秒 TTL、各链路独立游标、txspace 不足时不推进待发字段。QGC 同值重发也增加字段接收序号，5 秒本地 TTL 不是原测量时间。
+
+`COMMAND_LONG 31010..31019` 的 param3=request、param4=session，均为 1..16777215 的精确整数，param1/2 不变。QGC 文件与 ROS SQLite 持久化防复用；普通动作持久化后派发，STOP 先执行再持久化。已退休/重复请求不重新运动，重复旧 STOP 不打断新任务；不要删除身份文件绕过错误。旧协议仅允许尝试停止。
+
+ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份，只作证据；任务成功必须是关联终态。停止每 5 秒重试且总期限 15 秒；非停止载荷命令不自动重试。
+
 ### FCU 采样结果约束
 
-- 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。真实采样默认要求有效 GPS 且源时间年龄 <=2 秒；开始冻结位置，结束不回填。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。当前 MAVLink/QGC 不原子传输样本点，WQ_SAMPLE_POINT 仅为待三端实现的设计草案。
+- 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。GPS 可选；存在新鲜有效定位时冻结起点，缺失时记录空坐标且结束不回填。真实测量/基线门禁仍强制。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。WQ_SAMPLE_POINT 仍未实现。
 
-- `sampling_stopped` 只关闭 Web 记录生命周期，不再触发 `USV_DONE`。
+- `sampling_stopped` 不触发 `USV_DONE`；Web 关窗还需匹配 attempt 的最终结果，避免 pump finished 早于 trigger 清理失败。
 - `outcome` 仅接受 `succeeded/failed/cancelled/skipped`。失败、取消、非 FCU 来源、ID 不匹配或非法结果均不放行。
 - FCU 启动失败、执行失败按 `sampling_on_fail` 处理：HOLD/ABORT 请求 HOLD 且不放行；明确 SKIP 才发布 `skipped` 允许放行。主动取消不受 SKIP 策略影响。忙碌拒绝不会中断已有采样。
 - 自动化正常结束为 `finished`，直接停止为 `stopped`，异常为 `failed`；不得把后两者解释成成功。
@@ -115,7 +125,7 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 - 人工 MANUAL/RTL 接管优先于迟到的旧采样失败；ROS 取消旧采样而不回切模式，飞控 `USV_FAIL` 只作用于当前 AUTO 中匹配的采样。非 USV 脚本进入失败不继承上一 USV 的超时状态。
 - 新增控制事件 `USV_FAIL(sample_id)`：ROS 失败/取消通知飞控 HOLD；飞控超时也用同名事件通知 bridge 取消匹配采样。它不是第 23 个显示遥测字段。飞控只接受本 sysid、component 191 的载荷消息；bridge 只接受本 sysid、component 1 的飞控事件。
 - `USV_DONE/USV_FAIL` 仍为有限传输重试，不具备端到端 ACK 或持久化交付；未引入飞控跨重启会话 ID。丢包时安全兜底是 HOLD，而不是宣称任务必定完成。FCU 仍不走旧 waypoint 自动重试路径。
-- 更新必须停机并成套重启 trigger/bridge/pump；不得混用新旧版本进程。QGC 和飞控的命令号、22 个遥测字段保持不变。
+- 更新必须停机并成套重启 trigger/bridge/pump；不得混用新旧进程。命令号不变，当前显示字段为 26 项；必须配套更新飞控和 QGC。
 
 ### safety1 本地采样事务
 
