@@ -1,6 +1,6 @@
 # 无人船跨端代码修复方案
 
-日期：2026-10-18；实施更新：2026-10-19。状态：代码与离线验证完成，分仓发布中；设备验收待用户执行。范围：ROS、ESP32、ArduRover、QGC，以及受协议变更影响的 Web 和 Windows 上位机。地图功能不改、地图测试跳过。
+日期：2026-10-18；实施更新：2026-10-19。状态：代码与离线验证完成，ROS/飞控/检测板/Windows 已合并；QGC 已推送，合并被全仓 CI 阻断；设备验收待用户执行。范围：ROS、ESP32、ArduRover、QGC，以及受协议变更影响的 Web 和 Windows 上位机。地图功能不改、地图测试跳过。
 
 ## 一 总体决策
 
@@ -394,8 +394,10 @@ QGC 日志在 `build/audit-*.log`，QML 报告在 `build/tests/reports/test-repo
 | ArduRover / master | [#10](https://github.com/MIGO-OvO/ardupilot-usv/pull/10) | 已 squash 合并 `925ee45f568521efdbb0b39b69b94ab81e11625d` |
 | DetFirmware / main | [#3](https://github.com/MIGO-OvO/DetFirmware/pull/3) | 已合并 `186427df75047c0212d74969df2c18a3df01fd40` |
 | Windows / master | [#8](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/8) | 已合并 `241ee6230576289b78448075525b57ffd611535a` |
-| QGC / master | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) | 修复分支已推送 `8923ce3c4`；CI 扫描器修正 `15e924c5d`；等待云端检查，不绕过失败合并 |
+| QGC / master | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) | 修复分支已推送 `15e924c5d9c2090b5e20dbdfb19a7d7bafcf38fb`（含业务修复 `8923ce3c4`）；全仓 pre-commit 失败，尚未合并 |
 
 前四仓库本地默认分支已 fast-forward，并与 `git ls-remote` 核对 SHA；合并树与已验证候选树一致。它们未配置 PR 云端检查，不将空检查列表描述为 CI 通过。QGC 复用已有 PR #17，保留其原 UI 基线；仅复用 #16 已存在并核实的 Trivy action/tool 版本修正，不合并 #16 其他改动。其他开放 PR 不自动关闭或合并。
+
+QGC 云端阻塞证据：[pre-commit run 39150655160](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39150655160)。流水线运行全仓 hooks，出现格式、缺少 clang compilation database / Qt include、Python yaml 依赖等错误。示例 `src/AutoPilotPlugins/APM/APMFlightModesComponent.h` 与 `package.json` 的 HEAD blob 均与 origin/master 相同，却出现在失败输出中，证明至少含既有基线问题；这不证明其余检查都与本轮无关。继续关闭该门禁需要单独处理 QGC CI 基线并重新验证，不通过降低检查标准或全仓顺手格式化来宣称成功。其他云端构建当时仍在运行，不记录为通过。
 
 用户已有审计目录、QGC `.workbuddy/`、Rover WSL 构建入口及旧运行窗口均保留，未纳入提交。构建产物、日志不提交。仓库合并不是现场部署授权或验收结论；请按第七节成套升级，并先完成停止与低负载台架验证。
