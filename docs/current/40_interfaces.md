@@ -21,10 +21,10 @@ Updated: 2026-10-19
 
 | 名称 | 类型 | 方向 | 说明 |
 |---|---|---|---|
-| `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | `[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp]` |
-| `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | COMMAND_ACK 队列 |
+| `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | `[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp,request,session,tcp_session]`；兼容旧 7 元内部事件 |
+| `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | `[cmd,result,target_sys,target_comp,tcp_session]`，过滤旧 TCP 会话；兼容旧 4 元 ACK |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
-| `/usv/sampling_result` | `String(JSON)` | trigger -> bridge | FCU 结果：`source=fcu`、`sample_id`（整数 1..65535）、`outcome`、`reason`；非 latched |
+| `/usv/sampling_result` | `String(JSON)` | trigger -> bridge/Web | 各 trigger 来源的 `attempt_id/source/outcome/reason` 最终结果；FCU 另带整数 1..65535 的 `sample_id`；非 latched |
 | `/usv/sample_record` | `String(JSON)` | trigger -> 记录消费者 | 采样终态 SampleRecord：UUID sample_id、开始 GPS 快照、起止时间、光谱/水质；非 latched，详见 `80_sample_gps_binding.md` |
 | `/usv/mission_status` | `String` | trigger -> bridge | 状态码来源 |
 | `/usv/automation_status` | `String(JSON)` | pump -> bridge/Web | 自动化运行、暂停、步骤和 PID 状态 |
@@ -123,7 +123,7 @@ ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（
 - safety1 固件对 `param1=1` 的采样脚本：超时或伴随遥测超过 3 秒未更新时停止当前导航输出并进入 HOLD，不自动放行；其他脚本保留原有超时语义。`param2=0` 对 USV 采样按 255 秒上限处理。
 - ROS `set_mode` 在请求发送后最多等待 3 秒观测实际模式；`mode_sent` 不再等同于模式已生效。HOLD 不是原地定位保持，实际船态仍需实测。
 - 人工 MANUAL/RTL 接管优先于迟到的旧采样失败；ROS 取消旧采样而不回切模式，飞控 `USV_FAIL` 只作用于当前 AUTO 中匹配的采样。非 USV 脚本进入失败不继承上一 USV 的超时状态。
-- 新增控制事件 `USV_FAIL(sample_id)`：ROS 失败/取消通知飞控 HOLD；飞控超时也用同名事件通知 bridge 取消匹配采样。它不是第 23 个显示遥测字段。飞控只接受本 sysid、component 191 的载荷消息；bridge 只接受本 sysid、component 1 的飞控事件。
+- 控制事件 `USV_FAIL(sample_id)`：ROS 失败/取消通知飞控 HOLD；飞控超时也用同名事件通知 bridge 取消匹配采样。它不计入 26 个显示遥测字段。飞控只接受本 sysid、component 191 的载荷消息；bridge 只接受本 sysid、component 1 的飞控事件。
 - `USV_DONE/USV_FAIL` 仍为有限传输重试，不具备端到端 ACK 或持久化交付；未引入飞控跨重启会话 ID。丢包时安全兜底是 HOLD，而不是宣称任务必定完成。FCU 仍不走旧 waypoint 自动重试路径。
 - 更新必须停机并成套重启 trigger/bridge/pump；不得混用新旧进程。命令号不变，当前显示字段为 26 项；必须配套更新飞控和 QGC。
 
@@ -159,8 +159,8 @@ ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（
 - 采样序列配置、任务配置导入导出。
 - 自动化启动/暂停/恢复/停止。
 - 分光基线设置与电压/吸光度实时推送。
-- 数据中心跟随 `sampling_started` 自动建档，跟随 `sampling_stopped` / `survey_stopped` 停止记录。
-- 数据中心按 `sampling_started` -> `sampling_stopped` 生成 `sample_windows[]`；raw frame 不写入 mission JSON，只保存相对路径与摘要。
+- 数据中心跟随 `sampling_started` 自动建档；trigger 来源的真实窗口需匹配 `/usv/sampling_result` 后关窗，`sampling_stopped` / `survey_stopped` 不替代最终结果。Web 直接启动仍使用匹配自身 attempt 的自动化终态。
+- 数据中心按开始上下文与关联终态生成 `sample_windows[]`；raw frame 不写入 mission JSON，只保存相对路径与摘要。
 - 任务元数据采用同目录临时文件 + `fsync` + 原子替换；raw JSONL 周期同步并在窗口关闭时强制同步。正常结束状态为 `completed`，服务重启后未结束任务标记为 `interrupted`。
 - 航点采样配置 CRUD。
 - 采样窗口 API：`GET /api/data/mission/<id>/samples`、`GET /api/data/mission/<id>/sample/<sample_id>`、`GET /api/data/mission/<id>/sample/<sample_id>/raw?limit=2000&offset=0`、`POST /api/data/mission/<id>/sample/<sample_id>/manual-result`。

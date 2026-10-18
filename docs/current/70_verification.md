@@ -89,7 +89,7 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 | QGC 31011、Web 自动化停止 | `cancelled`，无 `USV_DONE`；停止服务期间到达的 finished 不可覆盖取消 |
 | 明确 SKIP | 结果为 `skipped` 而非成功，允许同 ID `USV_DONE` |
 | 重复触发、旧 ID/非法/非 FCU 结果 | 不重复采样，不释放当前新 ID；新 ID 清除未发送的旧完成通知 |
-| 普通 sampling_stopped | 只关闭记录，不生成完成通知 |
+| 普通 sampling_stopped | 不生成完成通知；有 attempt 的真实窗口等待匹配最终结果后关窗 |
 
 必须停机更新并成套重启 trigger/bridge/pump。离线测试不能证明实际船态、跨重启 ID 复用或无线端到端送达；safety1 的超时/失联 HOLD 必须补 SITL 和实船验收。
 
