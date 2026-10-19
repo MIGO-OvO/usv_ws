@@ -6,6 +6,8 @@ Updated: 2026-10-19
 
 2026-10-19 本轮按用户要求跳过地图测试，不修改地图功能。可重复入口：ROS `python -B tests/run_non_map_tests.py`，QGC 控制器 Qt Quick Test、真实 Vehicle/StatusText 单测，DetFirmware native/PIO，Rover SITL/Pixhawk6C。结果及版本清单见 `docs/reports/2026-10-18-cross-end-code-repair-plan.md`。
 
+续修实际基线、逐项红绿、最终 PR/CI 分类与候选指纹见 [2026-10-19 续修闭环](../reports/2026-10-19-audit-followup.md)。不以旧审计 SHA、旧构建或正在运行的旧 QGC 窗口代表本轮产物。
+
 重点覆盖：旧动作取消与重连、STOP 不等长事务/磁盘、当前会话真帧与基线、2 秒失效/10 秒有界恢复、ADS I²C 互斥与真实 POWERDOWN、TCP 背压/部分帧/会话换代、26 字段独立年龄/公平转发、请求持久化与分片重组、校准完成与失败首因、Web 最终结果导出。
 
 所有设备更新、烧录、台架、低剂量及实船测试由操作者执行。需保留独立断电手段并测量真实停机时间；不能把 ACK、离线测试或编译通过当现场验收。地图相关章节保留为后续参考，本轮未执行。
@@ -30,6 +32,10 @@ Updated: 2026-10-19
 | Python 语法 | `python3 -m py_compile src/usv_ros/scripts/*.py` | 无语法错误 |
 | Launch 参数 | `roslaunch usv_ros usv_bringup.launch --dump-params` | 参数可展开 |
 | 单元测试 | `python3 -m unittest discover -s src/usv_ros/tests -p 'test_*.py'` | 全部通过 |
+| 本轮非地图回归 | ROS 内 `python -B tests/run_non_map_tests.py` | 明确排除项、环境跳过与失败数；不得宣称全地图验证 |
+| 测量最终边界 | ROS 内 `python -B tests/test_remaining_measurement_paths.py` | scoped 停止不等帧、lead 后重验、生产错误帧及时终止；短静默仍可有界等待 |
+| 事件首发与背压 | ROS 内 `python -B tests/test_event_delivery_priority.py` | 新转换/终态不被历史拖延、STOP 优先、容量有界、完整帧 |
+| 真实协议联测 | 真实 pymavlink 环境运行 `tests/test_bridge_qml_event_chain.py`，将其完整 MAVLink2 帧交给原生 QGC 测试 | 丢 accepted 后合法空 outcome progress 仍进入执行；最终成功必须 terminal |
 | lab_sim 库编译 | `python3 -m py_compile src/usv_ros/scripts/lib/lab_sim/*.py` | 无语法错误 |
 | 前端构建 | `cd src/usv_ros/frontend && npm run build` | 构建成功；产物写入 `static/dist` |
 | 系统健康节点 | `rostopic echo -n 1 /usv/system_health` | Jetson、detector、ROS 节点字段存在 |
@@ -58,7 +64,7 @@ Updated: 2026-10-19
 | QGC 手动命令 | QGC 发送 `COMMAND_LONG 31010` | `/usv/mavlink_cmd_rx` 收到，trigger 发布状态，ACK 返回 |
 | QGC 冷启动 | ROS 启动后立即点击启动信号 | bridge 不等待飞控心跳才开始接收；采样 owner 在 MAVROS 初始化等待期间仍每秒续约；配置回显和有效首帧后才成功 |
 | QGC 点采样进样 | Web 自动进样策略设不同于 `default_speed` 的速度，QGC 启动点采样 | 准备完成后按策略速度开启进样泵；准备时不提供暂停，主按钮可停止准备 |
-| QGC 普通停止 | 准备、采样、暂停阶段分别点击 `31011` | 取消当前流程、停止全部泵输出；设备确认后 ACK 返回；不依赖紧急停止；Web 记录窗口关闭 |
+| QGC 普通停止 | 准备、采样、暂停阶段分别点击 `31011` | 取消当前流程并请求全部输出停止；关联终态/清理结果与实物停止分别确认，标准 ACK 不代替它们；不依赖紧急停止；Web 记录窗口按匹配结果关闭 |
 | 校准命令 | QGC 发送 `31014` | `/usv/pump_command` 出现 `CALXYZA` |
 | 遥测字段 | 运行 bridge | QGC 显示 26 字段；固件 2 Hz 公平转发，停源后不续旧值 |
 | 健康遥测 | 运行 system health + bridge | QGC 显示 `USV_JTMP/ETMP/JCPU/JMEM/EHEAP` 对应 Fact |
@@ -72,7 +78,7 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 |---|---|---|
 | 固件触发 | `NAV_SCRIPT_TIME(param1=1)` | ROS bridge 收到 `USV_SMPL` |
 | ROS 采样 | `/usv/trigger_status`、`/usv/pump_status` | 出现 `sampling_started`，状态进入采样并执行序列 |
-| QGC/Web 记录 | QGC 采样数据页、Web 数据中心 | `USV_SCNT` 递增，Web 新任务记录数据点增长 |
+| QGC/Web 记录 | QGC 采样数据页、Web 数据中心 | `USV_SCNT` 为启动次数而非成功计数；Web 新任务记录有效数据点增长，成功另看匹配终态 |
 | 完成通知 | bridge 日志、固件行为 | ROS 发 `USV_DONE`，固件继续 mission script |
 | 失败策略 | 配置 `HOLD/SKIP/ABORT` | 行为与配置一致 |
 
@@ -121,6 +127,8 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 | 整船重启/丢失 USV_DONE | 不自动将旧 ID 放行；人工确认当前船态与采样状态；本版本尚无跨重启交付保证 |
 
 验收记录须含五端提交号、固件/应用产物 SHA-256、配置快照、事件日志和实际执行器证据。不得仅凭通过源码契约检查标记为可上船。
+
+候选快照现为 schema 3：未跟踪且未忽略文件的规范路径、类型及原始内容/链接目标摘要纳入身份。旧 schema 2 清单须重新生成，不能直接比较。`--require-release` 仍拒绝 dirty 子仓库并要求验收与产物摘要；保留用户未跟踪文件的候选如实标 dirty，不等于发布门禁已通过。
 
 ## 检测装置验证
 

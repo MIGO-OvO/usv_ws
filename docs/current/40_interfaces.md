@@ -111,6 +111,10 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 
 ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份，只作证据；任务成功必须是关联终态。停止每 5 秒重试且总期限 15 秒；非停止载荷命令不自动重试。
 
+普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；32 请求/30 秒缓存不变。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
+
+飞控逐链路独立游标继续适用，同时跳过 private、不活动及启用宏下的 high-latency 链路；这是既有链路策略，不代表普通 TELEM2 离线原因。
+
 ### FCU 采样结果约束
 
 - 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。GPS 可选；存在新鲜有效定位时冻结起点，缺失时记录空坐标且结束不回填。真实测量/基线门禁仍强制。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。WQ_SAMPLE_POINT 仍未实现。
@@ -141,6 +145,8 @@ ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（
 - 预启动进样绑定同一 attempt；走航采样间隔仍续约进样 owner，泵端在进样开启而引擎空闲时也检查 owner，避免孤儿进样。attempt ID 是关联标识，不是权限凭证。
 - `STOP`、`STOPALL`、四轴旧停止文本、`manual_stop_all`、Web `/api/motor/stop` 均取消自动化并停止全部输出。重连先取消旧事务，禁止跨设备连接延续采样。
 - 分光无效帧立即清除旧有效平均值；泵控和 bridge 默认 2 秒超时置无效，bridge 健康值超过 5 秒恢复未知。有效性与链路在线分别判定。
+- 当前 owner/attempt 的可信 preflight 停止（`PUMP:OFF`、轴 `DFV0J0`）不等待测量；旧 owner 仍不得停止新任务。恢复进样 lead 后，在最终新运动串口写入边界重验当前测量、取消、连接会话与 owner。
+- 普通短静默保留既有有界恢复窗口；明确 I²C/饱和等错误立即失效并记录首因、通知任务线程安全收尾，不能被 freshness 检查覆盖成普通 stale。reader 不同步等 ACK；新帧不能自动清故障或续泵。
 
 ### safety1 Web 访问
 
@@ -205,6 +211,8 @@ safety1 成套更新要求：身份响应须包含 `CAP=WATCHDOG1`。上电禁�
 分光状态 bit4 (`0x10`) 表示压力测试合成帧，bit0 清零；接收端同时检查 bit4，不能仅按 bit0 判有效。帧长度不变。ROS 不把测试帧写入真实采样窗口；Windows 标记为无效。该标记不同于 ROS Lab 的显式模拟数据源。
 
 ROS/Windows 混合串口解析器均保留读取块末尾单独的 `0x55`，避免帧头跨读取边界时丢帧；联合黄金帧回归覆盖分片、坏校验与测试位。
+
+Windows 的 ADS STOP 事务只消费当前固件专属回复 `ADS_OK:STOP`、`ADS_ERR:STOP_I2C`、`ADS_ERR:STOP_MUTEX_TIMEOUT`；迟到 START/配置错误不得推进 STOP。Qt 已排队 reader 回调在交付时按不可变 reader 身份过滤；关闭等待或清 buffer 不替代会话隔离。
 
 | 项 | 当前值 |
 |---|---|

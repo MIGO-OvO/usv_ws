@@ -6,13 +6,15 @@ Snapshots are candidates, never automatic evidence of field acceptance.
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA_VERSION = 2
-SOURCE_HASH_FORMAT = 'sha256-text-lf'
+SCHEMA_VERSION = 3
+SOURCE_HASH_FORMAT = 'sha256-text-lf+untracked-bytes-v1'
 REPOS = {
     'ros': ('src/usv_ros', ['scripts/pump_control_node.py', 'scripts/mavlink_trigger_node.py',
                            'scripts/usv_mavlink_router_bridge.py', 'scripts/web_config_server.py',
@@ -36,6 +38,25 @@ def git(directory, *args):
     return subprocess.check_output(['git', '-c', 'core.safecrlf=false', '-C', str(directory), *args], encoding='utf-8').strip()
 
 
+def untracked_identity(directory):
+    # NUL delimiters preserve spaces, Unicode, and newlines without Git quoting.
+    paths = subprocess.check_output(['git', '-C', str(directory), 'ls-files',
+                                     '--others', '--exclude-standard', '-z'])
+    result = {}
+    for raw in sorted(filter(None, paths.split(b'\0'))):
+        relative = raw.decode('utf-8', errors='surrogateescape')
+        path = directory / relative
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            kind, data = 'symlink', os.fsencode(os.readlink(path))
+        elif stat.S_ISREG(mode):
+            kind, data = 'file', path.read_bytes()
+        else:
+            raise ValueError('unsupported untracked candidate entry: ' + relative)
+        result[Path(relative).as_posix()] = {'type': kind, 'sha256': hashlib.sha256(data).hexdigest()}
+    return result
+
+
 def snapshot(root=ROOT):
     result = {'schema_version': SCHEMA_VERSION, 'source_hash_format': SOURCE_HASH_FORMAT,
               'contract': 'usv-safety1', 'field_verified': False, 'repositories': {}}
@@ -47,6 +68,7 @@ def snapshot(root=ROOT):
             'dirty': bool(git(directory, 'status', '--porcelain')),
             'working_diff_sha256': hashlib.sha256(subprocess.check_output(
                 ['git', '-c', 'core.safecrlf=false', '-C', str(directory), 'diff', '--binary', 'HEAD'])).hexdigest(),
+            'untracked_files': untracked_identity(directory),
             'contract_files': {file: hashlib.sha256((directory / file).read_bytes().replace(b'\r\n', b'\n')).hexdigest()
                                for file in files},
         }

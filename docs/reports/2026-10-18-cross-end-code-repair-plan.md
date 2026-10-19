@@ -386,18 +386,21 @@ QGC 日志在 `build/audit-*.log`，QML 报告在 `build/tests/reports/test-repo
 
 仍需现场确认的风险包括：真实 router/UART/无线断点、pymavlink 实际加载版本、供电/EMI/器件间歇失效、物理停止时间、MAVLink 事件分片在实际链路上的行为，以及原有 FCU 跨重启 sample_id 复用边界。最后一项继续维持既有人工确认和不自动放行策略；若要改变该策略，应单列端到端持久化结果协议项目，不混入本轮局部修复。
 
-## 九 发布清单（2026-10-19）
+## 九 发布清单（2026-10-19 续修）
 
-| 仓库 / 默认分支 | PR | 默认分支提交 / 状态 |
+| 仓库 / 默认分支 | PR | 续修提交 / 状态 |
 |---|---|---|
-| ROS / main | [#87](https://github.com/MIGO-OvO/usv_ros/pull/87) | 已合并 `778d055c9df80d2b9f29872fc54eeb8a2c34df93`；含 #86 超时热修复 |
-| ArduRover / master | [#10](https://github.com/MIGO-OvO/ardupilot-usv/pull/10) | 已 squash 合并 `925ee45f568521efdbb0b39b69b94ab81e11625d` |
-| DetFirmware / main | [#3](https://github.com/MIGO-OvO/DetFirmware/pull/3) | 已合并 `186427df75047c0212d74969df2c18a3df01fd40` |
-| Windows / master | [#8](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/8) | 已合并 `241ee6230576289b78448075525b57ffd611535a` |
-| QGC / master | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) | 修复分支已推送 `15e924c5d9c2090b5e20dbdfb19a7d7bafcf38fb`（含业务修复 `8923ce3c4`）；全仓 pre-commit 失败，尚未合并 |
+| ROS / main | [#88](https://github.com/MIGO-OvO/usv_ros/pull/88) | `6e94afa34eef6b98e75208ad0518155c8d7a6bab`；OPEN，未合并 |
+| QGC / master | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) | `d3be8c64baf201a37c82cf0e1bdc8290c1839cd1`；OPEN，新 CI 运行中 |
+| ArduRover / master | [#11](https://github.com/MIGO-OvO/ardupilot-usv/pull/11) | `8379c475f9315a3a439c948d4e6cf6de832d305b`；OPEN，未合并 |
+| Windows / master | [#9](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/9) | `5301057a40793d218d852885f586d1cf41e23667`；OPEN，未合并 |
+| DetFirmware / main | [#3](https://github.com/MIGO-OvO/DetFirmware/pull/3) | 已合并 `186427df75047c0212d74969df2c18a3df01fd40`；本轮无固件改动 |
+| usv_ws / main | [#24](https://github.com/MIGO-OvO/usv_ws/pull/24) | 本文档提交见 PR HEAD；OPEN，未合并 |
 
-前四仓库本地默认分支已 fast-forward，并与 `git ls-remote` 核对 SHA；合并树与已验证候选树一致。它们未配置 PR 云端检查，不将空检查列表描述为 CI 通过。QGC 复用已有 PR #17，保留其原 UI 基线；仅复用 #16 已存在并核实的 Trivy action/tool 版本修正，不合并 #16 其他改动。其他开放 PR 不自动关闭或合并。
+默认分支仍停在上一轮已合并版本（ROS `778d055c`、ArduRover `925ee45f`、Windows `241ee623`、DetFirmware `186427df`）；本轮续修均留在开放 PR，不自行合并、不部署。根文档在本轮提交前无法自引用最终 SHA，以 PR #24 HEAD 为准。ROS、ArduRover、Windows 仓库未配置 PR 云端检查，不将空检查列表描述为 CI 通过。
 
-QGC 云端阻塞证据：[pre-commit run 39150655160](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39150655160)。流水线运行全仓 hooks，出现格式、缺少 clang compilation database / Qt include、Python yaml 依赖等错误。示例 `src/AutoPilotPlugins/APM/APMFlightModesComponent.h` 与 `package.json` 的 HEAD blob 均与 origin/master 相同，却出现在失败输出中，证明至少含既有基线问题；这不证明其余检查都与本轮无关。继续关闭该门禁需要单独处理 QGC CI 基线并重新验证，不通过降低检查标准或全仓顺手格式化来宣称成功。其他云端构建当时仍在运行，不记录为通过。
+QGC 旧 CI 的 libevents 失败是依赖跟随 `main` 的基线问题，本轮已固定到兼容版本并触发新运行。pre-commit 仍包含与 `origin/master` 相同的既有格式/工具问题；只修本轮/本 PR 已确认问题，不全仓格式化、不跳过检查、不降低门禁。新运行结果以 PR #17 checks 为准，未出结果前不标记通过。
+
+用户已有审计目录、QGC `.workbuddy/`、Rover WSL 构建入口及旧运行窗口均保留，未纳入提交。构建产物、日志不提交。仓库合并不是现场部署授权或验收结论；请按第七节成套升级，并先完成停止与低负载台架验证。
 
 用户已有审计目录、QGC `.workbuddy/`、Rover WSL 构建入口及旧运行窗口均保留，未纳入提交。构建产物、日志不提交。仓库合并不是现场部署授权或验收结论；请按第七节成套升级，并先完成停止与低负载台架验证。
