@@ -51,7 +51,7 @@ ROS 测量门禁/引擎由 `ros_measurement` 负责；QGC 控制器/任务显示
 
 ### 仍受阻/未闭环
 
-- QGC 新 CI 运行尚在进行；pre-commit 的既有基线问题仍需独立修复，不能在结果未出前标记通过。
+- QGC 新 CI 构建仍在运行；pre-commit 仍为既有基线失败（本轮文件已单独通过格式/lint 核验），需独立修复基线后才能全绿。
 - 原始“待机后整组载荷离线”缺少匹配部署版本与同一运行窗口的 ROS→飞控→QGC 证据，保持未关闭。
 - 未执行 Jetson 实进程、ESP32/飞控刷写、台架或实船验收；本轮只提交/推送开放 PR。
 
@@ -102,6 +102,8 @@ PR #17 起点 `15e924c5...` 的旧 CI 已失败，不是仍在运行：Windows r
 `src/MAVLink/LibEvents/CMakeLists.txt` 在 master/起点均跟随 `main`；libevents `0ef305faa4cffdb09f01ca862ebfc108b7ff0cd5` 增加新 helper 及双参数回调，而 QGC 仍是旧 MAVLink/单参数回调。已有本地成功缓存实际是 `840a88ea...`，缓存目录 hash 不是依赖版本，不能证明新 main 可构建。本轮最小兼容固定为其 breaking change 前版本 `077677a7d2f48f0af0eb8a4e4a7b6310956728bc`，保留后续 Android 链接与 dangling-pointer 修复，不升级全套 MAVLink。
 
 旧 pre-commit run `39150655160` 是混合基线问题：`package.json`、`APMFlightModesComponent.h`、`tools/analyzers/README.md` 的代表失败与 master 相同；但 PR #17 自己改过的 `custom/res/actions/usv_actions.json` 也失败，不能统称无关历史。其他平台/其他 hook 未逐项归因，不宣称全部是环境问题；只修本轮/本 PR 已确认问题，不全仓格式化或降低门禁。
+
+新提交 `abe2994b3` 的 pre-commit run `39193987095` 仍为 11 通过/48 失败，与旧基线同量级；hooks 自动修改的 7 个文件均不是本轮文件。本轮变更单独核验：C++ 测试用 CI 同版本 clang-format `21.1.7` 通过；两个 QML 文件 `qmllint` 无输出；Python 契约文件的 ruff 8 项错误与 HEAD 完全相同；`src/MAVLink/LibEvents/CMakeLists.txt` 的 cmake-format 在 HEAD 基线同样失败。因此不把全仓 48 项失败写成本轮通过，也不通过跳过检查或全仓格式化制造全绿。
 
 ### 最小台架验收（由操作者执行）
 
