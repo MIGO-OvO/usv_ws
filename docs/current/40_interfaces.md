@@ -66,6 +66,25 @@ Updated: 2026-10-19
 | 31018 | 分光采集开始 | `mavlink_trigger_node.py` |
 | 31019 | 分光采集停止 | `mavlink_trigger_node.py` |
 
+### 命令完成条件（31010–31019）
+
+“接单结果”与“动作完成”“输出停止确认”是三件事，不能互相冒充。标准 `COMMAND_ACK` 不带请求身份，只能作证据；关联判定只用 `USVE1` 事件的 session/request/command/sender。
+
+| 命令 | 关联接单结果 | 动作完成条件 | 状态变化 | QGC 期限（接单/执行静默） | 后端重试 | 失败后恢复 |
+|---:|---|---|---|---|---|---|
+| 31010 | `request/accepted`＝启动准入通过 | `terminal`，或 accepted + 新状态进入采样 | `USV_STAT` 8→1/2 | 5s / 60s | 不自动 | 31011 确认停止 → 核验 → 31018/31017 → 新 request |
+| 31011 | `request/accepted`＝本次 `STOPALL_OK` | accepted 即完成（本次确认）；状态离开工作态为补充证据 | `USV_STAT`→0/12 | 15s / 15s | 可重发，同身份只重放结果 | 未知时保持锁定，核验后解除 |
+| 31012 | `request/accepted` | 状态进入 11 | `USV_STAT`=11 | 5s / 15s | 不自动 | 用 31013 或 31011 |
+| 31013 | `request/accepted` | 状态回到 1/2 | `USV_STAT`=1/2 | 5s / 15s | 不自动 | 失败用 31011 |
+| 31014 | `request/accepted` | `terminal` | `USV_STAT`=4 | 5s / 60s | 不自动 | 31011 → 重新校准 |
+| 31015 | `request/accepted` | 每个 attempt 一个 `terminal` | `USV_STAT`=14 | 5s / 60s | 不自动 | 31016 或 31011 |
+| 31016 | `request/accepted`＝本次全输出停止确认 | accepted 即完成 | `USV_STAT`→0/9/12/13 | 15s / 15s | 可重发 | 失败按停止未知处理 |
+| 31017 | `request/accepted`＝基线命令成功 | `USV_BSET` 新序号（异步证据） | `USV_BSET`=1 | 5s / 15s | 不自动 | 等待有效帧后重设 |
+| 31018 | `request/accepted`＝启动命令成功（配置回显 + `ADS_OK:START`） | 就绪由 `USV_VLD` 新序号决定，不等于命令完成 | `USV_ADS` 2→3 | 40s / 30s | 不自动 | 无帧时按测量状态处理，不锁船 |
+| 31019 | `request/accepted`＝本次 `ADS_OK:STOP` | accepted 即完成 | `USV_ADS`=1 | 15s / 15s | 可重发 | 失败按停止未知处理 |
+
+无关联身份的历史 STOP 只能按“兼容停止”降级处理：立即下发并只用标准 ACK 判定，不等待后端不会生成的关联事件。已退休（`retired`）请求的迟到 accepted/progress/terminal 只更新历史，不得重开等待、覆盖已核验标志或影响新任务。
+
 ## MAVLink Named Values
 
 QGC 载荷响应期限分两层：接单等待（`31018` 40 秒、停止类 `31011/31016/31019` 15 秒、其余 5 秒）与执行期静默窗（停止 15 秒、启动 30 秒、采样类 60 秒）。只有本次请求的关联事件（新 seq 的 progress）才续期；本地心跳和重放旧事件不续期。期限不等于固定作业延迟，超时后迟到的合法关联结果仍按身份收敛。
