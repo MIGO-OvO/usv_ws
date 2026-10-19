@@ -1,6 +1,29 @@
 # 验证矩阵
 
-Updated: 2026-10-19
+Updated: 2026-10-20
+
+## 停止恢复闭环验证边界（2026-10-20）
+
+本轮修复的自动化验证入口（均为离线、使用生产函数与受控时钟）：
+
+| 范围 | 入口 | 覆盖 |
+|---|---|---|
+| ROS 就绪快照与准备门禁 | `tests/test_stop_recovery_contract.py` | 并发帧不被误判、真 stale 仍拒绝、旧会话帧不能支撑新 START、机械准备不等待测量、交接仍拒绝 |
+| ROS 停止结果与锁存 | 同上 `ConfirmedStopTests` | 旧 `cleanup_failed`/分光故障不否决本次成功 STOP、未确认仍失败、只写失败不算停止、不可恢复故障保留、ADS/全输出范围分开 |
+| ROS 接收分帧 | `tests/test_mavlink_framing_contract.py` | 半帧/粘包、坏 CRC、未知消息 ID、合法外层帧 payload 内嵌命令不执行、BAD_DATA 不重连 |
+| QGC 控制器 | `custom/tests/tst_USVPayloadCommandController.qml` | Fault/Aborted 可恢复、多 STOP 各自结果、退休请求迟到终态、31018 已确认不锁船、进度续期与迟到结果 |
+| QGC 契约 | `custom/tests/test_usv_qgc_contract.py` | 期限常量、`allowed` 门禁、`expire` 的已接受/未知分支 |
+
+未执行：QGC 完整 C++ 构建（本机无 MSVC C++ 工具链）、Jetson ROS 运行、ESP32/飞控刷写、实船/台架。因此 `Vehicle.cc` 的提示抑制改动只经过源码核对，需在具备 Qt/MSVC 构建机的环境中确认编译。
+
+### 台架最小清单
+
+| 端 | 必须核验的现象 |
+|---|---|
+| QGC | Fault(3) 状态下“核验并解除锁定”可见且给出未满足条件；核验→启动分光→设基线→点采样可连续完成；连续点停止采样/停止分光/急停各自出现独立结果，无永久 busy |
+| Jetson/ROS | 停止后 `USV_STAT` 回到 0 且 `terminal_reason` 仍可查；`bad_data` 计数在坏帧时增长但 TCP 会话不重连；准备阶段无测量也能完成归零/360°/油相分割 |
+| 检测板 | `ADS_OK:START` 后先出现 `starting`（`USV_VLD=0`），首帧到达才 `acquiring`；真实 I2C 错误记为错误而不是静默 |
+| 飞控 | 采样失败后 `USV_STAT` 不长期停留 3；`USV_SMPL/USV_DONE` 配对不因本次修复改变 |
 
 ## 跨端修复验证边界
 

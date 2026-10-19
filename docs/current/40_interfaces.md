@@ -68,7 +68,9 @@ Updated: 2026-10-19
 
 ## MAVLink Named Values
 
-QGC 载荷响应期限：分光启动 `31018` 为 40 秒；停止类 `31011/31016/31019` 为 15 秒，发送层与 QML 面板一致。启动成功仍以配置回显、START ACK 和有效首帧为准；停止成功需设备停止确认。期限不等于固定作业延迟。
+QGC 载荷响应期限分两层：接单等待（`31018` 40 秒、停止类 `31011/31016/31019` 15 秒、其余 5 秒）与执行期静默窗（停止 15 秒、启动 30 秒、采样类 60 秒）。只有本次请求的关联事件（新 seq 的 progress）才续期；本地心跳和重放旧事件不续期。期限不等于固定作业延迟，超时后迟到的合法关联结果仍按身份收敛。
+
+启动与停止的成功含义不同：`31018` 的关联 `request/accepted` 只表示启动命令成功（配置回显 + `ADS_OK:START`），有效帧与基线异步决定“采样就绪”；没有首帧不得把已成功的启动命令改判为未响应或锁定整船。停止类命令的关联 `accepted` 是本次停止动作的结果（`31011/31016` 需本次 `STOPALL_OK` 确认，`31019` 需本次 `ADS_OK:STOP` 确认），设备状态遥测是同一结果的补充证据。
 
 ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服务初始化不阻塞采样 owner 续约。自动化准备期间使用现有 `USV_STAT=8`（准备/稳定等待），QGC 主动作提供停止准备，准备结束后进入采样状态才可暂停。QGC 手动点采样采用 Web 自动进样泵策略的速度，进样泵在准备完成后开启。
 
@@ -103,6 +105,28 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 | `USV_SURV` | 固件触发走航采样开关 |
 | `USV_DONE` | 仅在匹配 ID 的 `succeeded` 或明确 `skipped` 结果后，ROS 通知固件结束采样等待 |
 
+### 停止结果、恢复与准备门禁
+
+准备流程的测量门禁按阶段划分，避免把“测量暂不可用”当成“泵控制失效”：
+
+| 阶段 | 必需条件 |
+|---|---|
+| 启动准入（31010/31015 接单） | 当前会话真实有效帧 + 基线 + 串口会话 |
+| 归零 → 360° 补偿 → 油相 X 圈 → 进样预启动 | 串口会话、取消请求、真实泵角度反馈、PID 完成、owner 心跳；**不要求**测量新鲜 |
+| 交接给正式采样（preflight `verifying`） | 再次确认当前会话真实帧 + 基线；stale 但不能证明有效的数据不足以进入正式采集 |
+
+`ADS_OK:START` 只确认启动命令，不写入最后有效测量时间；首帧前 `spectro_state=starting` 且 `USV_VLD=0`。首帧宽限为 `max(measurement_timeout, 4s)`，超时按 `spectrometer_frame_timeout` 处理。真实 I2C/串口故障仍立即中止并停止输出。
+
+停止结果只依据**本次**停止动作与本次确认，历史 `terminal_reason`、历史 `cleanup_failed`、已处理的分光故障不再否决本次成功停止。本次 `STOPALL_OK`（来自本次有效串口会话且经 `PIDQUERY` 排空旧回复）确认后清除可恢复锁存并发布当前静止状态，同时保留历史失败原因：
+
+| 可恢复（确认停止后清除） | 需各自恢复条件（停止不清除） |
+|---|---|
+| `cleanup_failed`、`spectrometer_*`（分光会话类） | `disconnected`、`reconnecting`、`owner_lost`、`watchdog_tripped`、校准失败 |
+
+分光停止与全输出停止是两个范围，分别报告：`spectrometer_stop` 返回 `ads_stop` 与 `outputs_stop`，只有本次确实停止并确认了对应范围才为真。`USV_STAT` 在明确 `stopped` 且无进行中任务时回到 `0`（空闲），历史失败仅通过 `terminal_reason`/请求账本查看。
+
+bridge 诊断 JSON 增加只读字段 `bad_data`（按 `bad_crc`/`unknown_message_id`/`bad_length`/`bad_signature`/`other` 分类的计数）与 `bad_data_last_reason`。已拒绝的入站帧只计数，不重连、不清账本、不执行其 payload 内部字节。
+
 ### 关联请求与逐字段新鲜度
 
 常规显示遥测共 26 项；`USV_SMPL/SURV/DONE/FAIL` 是控制事件，不计入显示字段数。ROS 按源回调与字段年龄发送，失效 VLD/BSET/ADS 发 0；飞控每字段 3 秒 TTL、各链路独立游标、txspace 不足时不推进待发字段。QGC 同值重发也增加字段接收序号，5 秒本地 TTL 不是原测量时间。
@@ -112,6 +136,8 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份，只作证据；任务成功必须是关联终态。停止每 5 秒重试且总期限 15 秒；非停止载荷命令不自动重试。
 
 普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；32 请求/30 秒缓存不变。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
+
+trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `TEMPORARILY_REJECTED` 标准 ACK 外，还会产生与请求身份关联的 `phase=request, outcome=rejected, reason=command_lane_busy`，由独立的有界通知线程持久化，不在接收回调里写账本，因此不会出现“无人负责、无结果、重试又被静默吞掉”的 reservation。后端拒绝时 `request/failed` 的 `reason` 保留控制服务的具体消息（例如 `spectrometer_not_ready: ...`），不再统一压成 `command_rejected_or_cancelled`。
 
 飞控逐链路独立游标继续适用，同时跳过 private、不活动及启用宏下的 high-latency 链路；这是既有链路策略，不代表普通 TELEM2 离线原因。
 
