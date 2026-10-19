@@ -1,6 +1,6 @@
 # 2026-10-19 跨端审计续修闭环
 
-本轮边界：分仓提交、推送和 PR；不合并、不部署、不刷写、不启动真实泵。地图测试排除。离线/原生 Qt/SITL 结果均不等于 Jetson、台架或实船验收。
+本轮边界：分仓提交、推送和合并 PR；不部署、不刷写、不启动真实泵。地图测试排除。离线/原生 Qt/SITL 结果均不等于 Jetson、台架或实船验收。
 
 ## 实际起点
 
@@ -51,9 +51,9 @@ ROS 测量门禁/引擎由 `ros_measurement` 负责；QGC 控制器/任务显示
 
 ### 仍受阻/未闭环
 
-- QGC 新 CI 构建仍在运行；pre-commit 仍为既有基线失败（本轮文件已单独通过格式/lint 核验），需独立修复基线后才能全绿。
+- QGC 云端 CI 已按用户指令停止（构建运行约 23 分钟后取消），未取得全平台结果；pre-commit 仍为既有基线失败（本轮文件已单独通过格式/lint 核验），不能标记为 CI 全绿。
 - 原始“待机后整组载荷离线”缺少匹配部署版本与同一运行窗口的 ROS→飞控→QGC 证据，保持未关闭。
-- 未执行 Jetson 实进程、ESP32/飞控刷写、台架或实船验收；本轮只提交/推送开放 PR。
+- 未执行 Jetson 实进程、ESP32/飞控刷写、台架或实船验收；本轮只提交/推送并合并代码 PR，未部署。
 
 ## 已执行验证
 
@@ -75,12 +75,12 @@ ROS 测量门禁/引擎由 `ros_measurement` 负责；QGC 控制器/任务显示
 
 | 仓库 | 本轮提交 | PR / 状态 |
 |---|---|---|
-| ROS | `6e94afa34eef6b98e75208ad0518155c8d7a6bab` | [#88](https://github.com/MIGO-OvO/usv_ros/pull/88)，OPEN；远端 SHA 已核对；仓库无检查，不称 CI 通过 |
-| QGC | `abe2994b374731495358b8de5dd2fd50a02d4811` | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17)，OPEN；远端 SHA 已核对；新 CI 运行见下方归因 |
-| ArduRover | `8379c475f9315a3a439c948d4e6cf6de832d305b` | [#11](https://github.com/MIGO-OvO/ardupilot-usv/pull/11)，OPEN；远端 SHA 已核对；无 CI workflows |
-| Windows | `5301057a40793d218d852885f586d1cf41e23667` | [#9](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/9)，OPEN；远端 SHA 已核对；无 CI workflows |
+| ROS | `6e94afa34eef6b98e75208ad0518155c8d7a6bab` | [#88](https://github.com/MIGO-OvO/usv_ros/pull/88) MERGED → `2ee60613e032308d0f7e7e92c28533824929bb45`；仓库无 PR 检查 |
+| QGC | `abe2994b374731495358b8de5dd2fd50a02d4811` | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) MERGED → `d9684678340d462c6e947c68fd4866120cc3215c`；云端 CI 按指令停止，未取得全平台结果 |
+| ArduRover | `8379c475f9315a3a439c948d4e6cf6de832d305b` | [#11](https://github.com/MIGO-OvO/ardupilot-usv/pull/11) MERGED（squash）→ `2f64492510d433225ce6313e9a51cff35b281d80`；无 CI workflows |
+| Windows | `5301057a40793d218d852885f586d1cf41e23667` | [#9](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/9) MERGED → `b3d1ca9553629034d75aee5d6f8aa47451f99686`；无 CI workflows |
 | DetFirmware | `186427df75047c0212d74969df2c18a3df01fd40`（未改） | 旧 #3 已合并，无人为制造续修 PR |
-| usv_ws | 本轮文档提交见 [#24](https://github.com/MIGO-OvO/usv_ws/pull/24) HEAD | OPEN；不在自身内容中伪造自引用 SHA |
+| usv_ws | 本提交随 [#24](https://github.com/MIGO-OvO/usv_ws/pull/24) 合并 | merge SHA 由 GitHub 生成，不在自身内容中伪造自引用 SHA |
 
 本轮不改变 USVE1 线协议版本、命令号、字段数、watchdog 或板端 PID 限时。ROS 与 QGC 的事件/任务修复应作为匹配组合验收；Windows 关闭旧会话后启动新程序。DetFirmware 复用上述已核验版本，无新增固件补丁，不要求为本轮相同源码重复刷写。清单是源码候选，不是现场部署记录；根仓最终提交以 #24 HEAD 为准，避免在自身内容中伪造自引用 SHA。
 
@@ -105,6 +105,8 @@ PR #17 起点 `15e924c5...` 的旧 CI 已失败，不是仍在运行：Windows r
 
 新提交 `abe2994b3` 的 pre-commit run `39193987095` 仍为 11 通过/48 失败，与旧基线同量级；hooks 自动修改的 7 个文件均不是本轮文件。本轮变更单独核验：C++ 测试用 CI 同版本 clang-format `21.1.7` 通过；两个 QML 文件 `qmllint` 无输出；Python 契约文件的 ruff 8 项错误与 HEAD 完全相同；`src/MAVLink/LibEvents/CMakeLists.txt` 的 cmake-format 在 HEAD 基线同样失败。因此不把全仓 48 项失败写成本轮通过，也不通过跳过检查或全仓格式化制造全绿。
 
+按用户 2026-10-19 指令，QGC 在线构建/CI 在约 23 分钟后停止，未等待 Windows/Linux/MacOS/Android/Docker 完成；本地 Debug/Release 全量构建与原生/QML 测试是独立证据，不冒充云端 CI 通过。四个代码 PR 均以锁定 head SHA 合并，QGC merge 为 `d9684678340d462c6e947c68fd4866120cc3215c`。
+
 ### 最小台架验收（由操作者执行）
 
 1. 记录实际运行五端提交、应用/固件产物 SHA-256、配置与身份文件；先确认独立断电和停止入口。不要将本地源码或当前云端 HEAD 当成已部署版本。
@@ -114,4 +116,4 @@ PR #17 起点 `15e924c5...` 的旧 CI 已失败，不是仍在运行：Windows r
 5. 短静默应等待有效帧再允许新动作；明确饱和/I²C 错误及时终止且首因保留。恢复通信/收到好帧不自动清故障或恢复泵动作。
 6. 断线/重连/切船、旧 ON/STOP、过期请求、取消后迟到终态不得重放或影响新任务；暂停/恢复后原任务失败仍可见，未完成校准断线须锁定，STOP 始终可用。
 
-未取得匹配部署版本和同一运行窗口的端到端证据前，不宣布原始“待机后载荷离线”已彻底解决。所有 PR 保持未合并；不在此任务中部署、刷写或启动硬件。
+未取得匹配部署版本和同一运行窗口的端到端证据前，不宣布原始“待机后载荷离线”已彻底解决。本轮代码 PR 已按用户指令合并；不在此任务中部署、刷写或启动硬件。

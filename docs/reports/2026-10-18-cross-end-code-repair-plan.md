@@ -390,17 +390,15 @@ QGC 日志在 `build/audit-*.log`，QML 报告在 `build/tests/reports/test-repo
 
 | 仓库 / 默认分支 | PR | 续修提交 / 状态 |
 |---|---|---|
-| ROS / main | [#88](https://github.com/MIGO-OvO/usv_ros/pull/88) | `6e94afa34eef6b98e75208ad0518155c8d7a6bab`；OPEN，未合并 |
-| QGC / master | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) | `d3be8c64baf201a37c82cf0e1bdc8290c1839cd1`；OPEN，新 CI 运行中 |
-| ArduRover / master | [#11](https://github.com/MIGO-OvO/ardupilot-usv/pull/11) | `8379c475f9315a3a439c948d4e6cf6de832d305b`；OPEN，未合并 |
-| Windows / master | [#9](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/9) | `5301057a40793d218d852885f586d1cf41e23667`；OPEN，未合并 |
+| ROS / main | [#88](https://github.com/MIGO-OvO/usv_ros/pull/88) | MERGED（merge `2ee60613e032308d0f7e7e92c28533824929bb45`），head `6e94afa34eef6b98e75208ad0518155c8d7a6bab` |
+| QGC / master | [#17](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/17) | MERGED（merge `d9684678340d462c6e947c68fd4866120cc3215c`），head `abe2994b374731495358b8de5dd2fd50a02d4811`；云端 CI 按用户指令停止 |
+| ArduRover / master | [#11](https://github.com/MIGO-OvO/ardupilot-usv/pull/11) | MERGED（squash `2f64492510d433225ce6313e9a51cff35b281d80`），head `8379c475f9315a3a439c948d4e6cf6de832d305b` |
+| Windows / master | [#9](https://github.com/MIGO-OvO/MotorControlApp_Pyside6/pull/9) | MERGED（merge `b3d1ca9553629034d75aee5d6f8aa47451f99686`），head `5301057a40793d218d852885f586d1cf41e23667` |
 | DetFirmware / main | [#3](https://github.com/MIGO-OvO/DetFirmware/pull/3) | 已合并 `186427df75047c0212d74969df2c18a3df01fd40`；本轮无固件改动 |
-| usv_ws / main | [#24](https://github.com/MIGO-OvO/usv_ws/pull/24) | 本文档提交见 PR HEAD；OPEN，未合并 |
+| usv_ws / main | [#24](https://github.com/MIGO-OvO/usv_ws/pull/24) | 随本 PR 合并；merge SHA 由 GitHub 生成，不在内容中自引用 |
 
-默认分支仍停在上一轮已合并版本（ROS `778d055c`、ArduRover `925ee45f`、Windows `241ee623`、DetFirmware `186427df`）；本轮续修均留在开放 PR，不自行合并、不部署。根文档在本轮提交前无法自引用最终 SHA，以 PR #24 HEAD 为准。ROS、ArduRover、Windows 仓库未配置 PR 云端检查，不将空检查列表描述为 CI 通过。
+四个代码 PR 均在合并时锁定已验证 head SHA；默认分支随后由本地 fast-forward 同步。ROS、ArduRover、Windows 仓库未配置 PR 云端检查，不将空检查列表描述为 CI 通过。
 
-QGC 旧 CI 的 libevents 失败是依赖跟随 `main` 的基线问题，本轮已固定到兼容版本并触发新运行。pre-commit 仍包含与 `origin/master` 相同的既有格式/工具问题；只修本轮/本 PR 已确认问题，不全仓格式化、不跳过检查、不降低门禁。新运行结果以 PR #17 checks 为准，未出结果前不标记通过。
+QGC 旧 CI 的 libevents 失败是依赖跟随 `main` 的基线问题，本轮已固定到兼容版本；pre-commit 仍包含与 `origin/master` 相同的既有格式/工具问题。按用户指令，QGC 在线构建在约 23 分钟后停止，未等待全平台完成；本地 Debug/Release 全量构建与原生/QML 测试是独立证据，不冒充云端 CI 通过，也不通过降低门禁制造全绿。
 
-用户已有审计目录、QGC `.workbuddy/`、Rover WSL 构建入口及旧运行窗口均保留，未纳入提交。构建产物、日志不提交。仓库合并不是现场部署授权或验收结论；请按第七节成套升级，并先完成停止与低负载台架验证。
-
-用户已有审计目录、QGC `.workbuddy/`、Rover WSL 构建入口及旧运行窗口均保留，未纳入提交。构建产物、日志不提交。仓库合并不是现场部署授权或验收结论；请按第七节成套升级，并先完成停止与低负载台架验证。
+用户已有审计目录、QGC `.workbuddy/`、Rover WSL 构建入口及旧运行窗口均保留，未纳入提交。构建产物、日志不提交。仓库合并已完成，但不是现场部署授权或验收结论；请按第七节成套升级，并先完成停止与低负载台架验证。
