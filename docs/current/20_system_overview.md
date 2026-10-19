@@ -1,6 +1,6 @@
 # 系统概览
 
-Updated: 2026-06-03
+Updated: 2026-10-19
 
 ## 五端结构
 
@@ -52,14 +52,14 @@ NAV_SCRIPT_TIME(param1=1)
 
 ## 当前能力
 
-`sampling_stopped` 只关闭 Web 记录窗口，不触发飞控完成通知。失败/取消不发送 `USV_DONE`；明确配置的 SKIP 以 `skipped` 结果放行，不标记为成功。safety1 飞控对采样超时/伴随链路失联默认 HOLD，并支持双向 `USV_FAIL`；ESP32 `WATCHDOG1` 处理主机失联停机。实际船态、物理输出与跨重启行为仍需 SITL/台架验收。
+`sampling_stopped` 不触发飞控完成通知；有 attempt 的真实 Web 窗口需匹配最终结果后关窗，不凭 pump finished 提前成功。失败/取消不发送 `USV_DONE`；明确配置的 SKIP 以 `skipped` 结果放行，不标记为成功。safety1 飞控对采样超时/伴随链路失联默认 HOLD，并支持双向 `USV_FAIL`；ESP32 `WATCHDOG1` 处理主机失联停机。SITL 已验证，实际船态、物理输出与跨重启行为仍需台架验收。
 
 - 航线定点采样只使用 `MAV_CMD_NAV_SCRIPT_TIME`，`param1=1` 表示 USV 定点采样，`param2` 为 1..255 秒超时。
 - `COMMAND_LONG 31010..31019`：手动采样、停止、暂停、恢复、校准、走航、基线、分光启停。
-- 22 个 `NAMED_VALUE_FLOAT` 载荷字段：17 个采样/分光/泵控字段，加 `USV_JTMP`、`USV_ETMP`、`USV_JCPU`、`USV_JMEM`、`USV_EHEAP` 系统健康字段。
+- 26 个 `NAMED_VALUE_FLOAT` 载荷字段：原 22 项加 `USV_LOOP/LTOT`、`USV_ADS/PROTO`，字段清单以 `Rover/USVPayload.h` 为准。
 - 固件缓存载荷字段并以 2 Hz 转发到 GCS。
 - `system_health_node.py` 聚合 Jetson CPU/内存/温度、ROS 节点和 ESP32 主控健康状态，Web 监控页可查看。
-- Web 数据中心跟随 `sampling_started` / `sampling_stopped` 采样生命周期自动建档和停止，不只依赖 Web 端启动任务。
+- Web 数据中心跟随 `sampling_started` 建档；trigger 所有任务按匹配 attempt 的最终 `/usv/sampling_result` 关窗，泵步骤结束不代表清理成功。
 - `mavlink-routerd` 独占飞控串口，MAVROS 与自定义 bridge 分离。
 - `usvctl`、`usvon`、`usvoff`、`usvstatus`、`usvdeploy` 管理现场启动更新。
 - `web_config_server.py` 提供 Web API、Socket.IO 实时数据、日志与链路诊断。

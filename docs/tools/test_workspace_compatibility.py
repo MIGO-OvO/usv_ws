@@ -5,11 +5,25 @@ from pathlib import Path
 from unittest.mock import patch
 
 from check_workspace_compatibility import (
-    compare_snapshot, snapshot, REPOS, RELEASE_ARTIFACTS, SCHEMA_VERSION, SOURCE_HASH_FORMAT,
+    check_contract, compare_snapshot, snapshot, FIELDS, REPOS, RELEASE_ARTIFACTS, SCHEMA_VERSION, SOURCE_HASH_FORMAT,
 )
 
 
 class ManifestTests(unittest.TestCase):
+    def test_all_26_fields_are_required_in_each_payload_endpoint(self):
+        self.assertEqual(len(set(FIELDS)), 26)
+        self.assertTrue({'USV_LOOP', 'USV_LTOT', 'USV_ADS', 'USV_PROTO'} <= set(FIELDS))
+        tokens = FIELDS + ['USVPayload::', 'usv_payload.fresh', 'send_usv_payload',
+                          'CAP=WATCHDOG1', 'WATCHDOG:ARM', 'WATCHDOG:KEEPALIVE', 'STOPALL',
+                          'SPECTRO_STATUS_TEST', '0x10', 'USV_FAIL', '_measurement_timeout',
+                          'link_lost', 'ModeReason::FAILSAFE', 'transaction_only', "action == 'automation_start'"]
+        with patch.object(Path, 'read_text', return_value=' '.join(tokens)):
+            self.assertEqual(check_contract(), [])
+        with patch.object(Path, 'read_text', return_value=' '.join(t for t in tokens if t != 'USV_ADS')):
+            errors = check_contract()
+            self.assertEqual(len(errors), 3)
+            self.assertTrue(all('missing USV_ADS' in error for error in errors))
+
     def test_contract_hashes_are_independent_of_checkout_line_endings(self):
         with tempfile.TemporaryDirectory() as temporary:
             roots = [Path(temporary) / name for name in ('windows', 'linux')]

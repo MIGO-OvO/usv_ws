@@ -6,31 +6,55 @@ Snapshots are candidates, never automatic evidence of field acceptance.
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA_VERSION = 2
-SOURCE_HASH_FORMAT = 'sha256-text-lf'
+SCHEMA_VERSION = 3
+SOURCE_HASH_FORMAT = 'sha256-text-lf+untracked-bytes-v1'
 REPOS = {
     'ros': ('src/usv_ros', ['scripts/pump_control_node.py', 'scripts/mavlink_trigger_node.py',
                            'scripts/usv_mavlink_router_bridge.py', 'scripts/web_config_server.py',
-                           'scripts/lib/web_access.py', 'launch/usv_bringup.launch']),
-    'fcu': ('ardupilot-usv', ['Rover/mode_auto.cpp', 'Rover/GCS_MAVLink_Rover.cpp', 'Rover/sensors.cpp']),
-    'qgc': ('WQ-USV-QGroundControl', ['custom/src/USVPayloadFactGroup.cc', 'src/MissionManager/MavCmdInfoRover.json']),
-    'detector': ('DetFirmware', ['src/main.cpp', 'src/protocol_packets.h', 'src/control_watchdog.h', 'platformio.ini']),
+                           'scripts/lib/web_access.py', 'scripts/lib/payload_protocol.py',
+                           'scripts/lib/injection_pump_worker.py', 'launch/usv_bringup.launch']),
+    'fcu': ('ardupilot-usv', ['Rover/mode_auto.cpp', 'Rover/GCS_MAVLink_Rover.cpp', 'Rover/sensors.cpp', 'Rover/USVPayload.h']),
+    'qgc': ('WQ-USV-QGroundControl', ['custom/src/USVPayloadFactGroup.cc', 'src/MissionManager/MavCmdInfoRover.json',
+                                    'custom/res/USVPayloadCommandController.qml', 'src/MAVLink/StatusTextHandler.cc']),
+    'detector': ('DetFirmware', ['src/main.cpp', 'src/ads122c04.h', 'src/protocol_packets.h',
+                               'src/control_watchdog.h', 'platformio.ini']),
     'desktop': ('MotorControlApp_Pyside6', ['src/hardware/serial_reader.py', 'src/core/serial_manager.py',
-                                          'src/ui/mixins/serial_mixin.py']),
+                                          'src/ui/mixins/serial_mixin.py', 'src/ui/mixins/spectro_mixin.py']),
 }
 FIELDS = ('USV_VOLT USV_ABS PUMP_X PUMP_Y PUMP_Z PUMP_A USV_STAT USV_PKT USV_STEP USV_STOT '
           'USV_SCNT USV_PERR USV_PMOD USV_BSET USV_REF USV_BASE USV_VLD USV_JTMP USV_ETMP '
-          'USV_JCPU USV_JMEM USV_EHEAP').split()
+          'USV_JCPU USV_JMEM USV_EHEAP USV_LOOP USV_LTOT USV_ADS USV_PROTO').split()
 RELEASE_ARTIFACTS = ('pixhawk6c_firmware', 'detector_firmware', 'qgc_application', 'ros_bundle', 'desktop_application')
 
 
 def git(directory, *args):
     return subprocess.check_output(['git', '-c', 'core.safecrlf=false', '-C', str(directory), *args], encoding='utf-8').strip()
+
+
+def untracked_identity(directory):
+    # NUL delimiters preserve spaces, Unicode, and newlines without Git quoting.
+    paths = subprocess.check_output(['git', '-C', str(directory), 'ls-files',
+                                     '--others', '--exclude-standard', '-z'])
+    result = {}
+    for raw in sorted(filter(None, paths.split(b'\0'))):
+        relative = raw.decode('utf-8', errors='surrogateescape')
+        path = directory / relative
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            kind, data = 'symlink', os.fsencode(os.readlink(path))
+        elif stat.S_ISREG(mode):
+            kind, data = 'file', path.read_bytes()
+        else:
+            raise ValueError('unsupported untracked candidate entry: ' + relative)
+        result[Path(relative).as_posix()] = {'type': kind, 'sha256': hashlib.sha256(data).hexdigest()}
+    return result
 
 
 def snapshot(root=ROOT):
@@ -44,6 +68,7 @@ def snapshot(root=ROOT):
             'dirty': bool(git(directory, 'status', '--porcelain')),
             'working_diff_sha256': hashlib.sha256(subprocess.check_output(
                 ['git', '-c', 'core.safecrlf=false', '-C', str(directory), 'diff', '--binary', 'HEAD'])).hexdigest(),
+            'untracked_files': untracked_identity(directory),
             'contract_files': {file: hashlib.sha256((directory / file).read_bytes().replace(b'\r\n', b'\n')).hexdigest()
                                for file in files},
         }
@@ -59,9 +84,11 @@ def check_contract(root=ROOT):
             if token not in source:
                 errors.append('%s: missing %s' % (path, token))
 
-    for path in ('src/usv_ros/scripts/usv_mavlink_router_bridge.py', 'ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp',
-                 'ardupilot-usv/Rover/sensors.cpp', 'WQ-USV-QGroundControl/custom/src/USVPayloadFactGroup.cc'):
+    for path in ('src/usv_ros/scripts/usv_mavlink_router_bridge.py', 'ardupilot-usv/Rover/USVPayload.h',
+                 'WQ-USV-QGroundControl/custom/src/USVPayloadFactGroup.cc'):
         contains(path, FIELDS)
+    contains('ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp', ['USVPayload::', 'usv_payload.fresh'])
+    contains('ardupilot-usv/Rover/sensors.cpp', ['send_usv_payload'])
     for path in ('DetFirmware/src/main.cpp', 'src/usv_ros/scripts/pump_control_node.py',
                  'MotorControlApp_Pyside6/src/core/serial_manager.py',
                  'MotorControlApp_Pyside6/src/ui/mixins/serial_mixin.py'):

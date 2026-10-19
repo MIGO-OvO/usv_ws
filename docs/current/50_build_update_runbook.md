@@ -1,6 +1,6 @@
 # 构建、更新、运行 Runbook
 
-Updated: 2026-05-20
+Updated: 2026-10-19
 
 ## 根仓库
 
@@ -156,6 +156,10 @@ cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 
 ## 最小现场启动检查
 
+2026-10 跨端版本需成套部署：先停任务并确认执行器安全，备份配置/旧产物/故障证据，再更新 ROS（含 static/dist）、DetFirmware、ArduRover 和 QGC，最后重启并只读核验。ROS 保留请求 SQLite 与 transport 会话文件，QGC 保留 `payload-request-identity.ini`；不要通过删除账本重置编号。旧 QGC 窗口必须退出后再启动新产物，本次 Agent 未替换运行中的窗口，也未烧录设备。
+
+先验证 STOP 与确认状态，再低负载验证准备/采样/失败恢复；检测板仍有独立 30 秒 PID 限时。出现旧动作重放、假成功、停止未确认或持续失联，立即停机并保留日志，回退匹配组合；不能回退到含已知安全缺陷的版本后继续自动采样。`rotate_runtime_logs.py` 默认 dry-run，仅显式 `--rotate` 时采用 10 MiB × 5 的 copytruncate；有微小丢行窗口，不自动处理现场证据。
+
 ```bash
 usvstatus
 rostopic list | grep usv
@@ -163,4 +167,8 @@ rostopic echo -n 1 /usv/bridge_diagnostics
 rostopic echo -n 1 /usv/radio_status
 ```
 
-通过标准：router 运行、MAVROS 连接、bridge 发送计数递增、QGC 可见载荷字段。
+上述输出只证明部分链路和进程活动：飞控/MAVROS 在线、发送计数增长、QGC 可见旧字段，均不能单独证明 ROS 当前在线或原始“待机后载荷离线”已解决。
+
+端到端验收须记录同一运行窗口的实际部署提交与产物摘要、sysid/component、request/session/tcp_session、attempt、字段独立 freshness 及关联终态。分光未启动/正常 STOP 后，其他载荷状态应长期继续更新，不能将分光无效等同整组离线。标准 ACK、进入准备、任务终态、软件清理和实物停止分别确认；通信恢复不得续泵或重放旧请求。
+
+本轮 Agent 仅提交/推送 PR，不合并、部署、烧录或控制硬件。操作者成套更新前，应按 [续修闭环](../reports/2026-10-19-audit-followup.md) 的版本清单与最小台架步骤验收；保留配置、身份账本和原始故障证据。

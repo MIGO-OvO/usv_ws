@@ -1,6 +1,6 @@
 # 源码地图
 
-Updated: 2026-06-19
+Updated: 2026-10-19
 
 ## 根仓库
 
@@ -30,7 +30,9 @@ Updated: 2026-06-19
 | `src/usv_ros/scripts/stop_usv_all.sh` | 停止主系统/router/roscore |
 | `src/usv_ros/scripts/status_usv_all.sh` | 进程、热点、MAVROS、bridge 诊断 |
 | `src/usv_ros/scripts/usvctl.sh` | `usvctl/usvon/usvoff/usvdeploy` 分发入口 |
-| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP、22 字段遥测、命令接收、ACK；按 `/usv/sampling_result` 的匹配成功/SKIP 结果门控 `USV_DONE` |
+| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP 有界完整写、26 字段遥测、关联事件、命令/ACK；匹配成功/SKIP 结果门控 `USV_DONE` |
+| `src/usv_ros/scripts/lib/payload_protocol.py` | 持久化请求去重、会话计数、ASCII 有界事件编码 |
+| `src/usv_ros/scripts/rotate_runtime_logs.py` | 默认预览的受控日志维护；不自动启用 |
 | `src/usv_ros/scripts/mavlink_trigger_node.py` | `31010..31019` 命令解释、采样状态机、航点采样、实验液滴事件发布 |
 | `src/usv_ros/scripts/pump_control_node.py` | 检测装置串口、自动化、分光、泵控 |
 | `src/usv_ros/scripts/lib/automation_engine.py` | 自动化执行；区分 `finished`、`stopped`、`failed` 终态 |
@@ -72,7 +74,8 @@ Updated: 2026-06-19
 |---|---|
 | `ardupilot-usv/AGENTS.md` | 固件仓库 AI 贡献规则 |
 | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` | `NAMED_VALUE_FLOAT` 缓存、`USV_DONE` 处理、MAVLink 消息入口 |
-| `ardupilot-usv/Rover/sensors.cpp` | `usv_telemetry_send()`，2 Hz 转发 22 字段 |
+| `ardupilot-usv/Rover/sensors.cpp` | `usv_telemetry_send()`，2 Hz 调度各链路 |
+| `ardupilot-usv/Rover/USVPayload.h` | 固定 26 字段表、逐字段时间与回绕安全 TTL |
 | `ardupilot-usv/Rover/Rover.h` | `usv_payload` 结构体字段 |
 | `ardupilot-usv/Rover/mode_auto.cpp` | mission script/NAV_SCRIPT_TIME 相关逻辑 |
 | `ardupilot-usv/libraries/GCS_MAVLink/` | MAVLink 路由、流控、消息基础实现 |
