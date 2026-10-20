@@ -4,25 +4,27 @@ Updated: 2026-10-20
 
 ## 停止恢复闭环验证边界（2026-10-20）
 
-本轮修复的自动化验证入口（均为离线、使用生产函数与受控时钟）：
+本轮（命令受理去持久化门槛 + 阶段化测量门禁 + 停止范围 + QGC 等待与恢复）的自动化验证入口（离线、使用生产函数与受控时钟）：
 
 | 范围 | 入口 | 覆盖 |
 |---|---|---|
-| ROS 就绪快照与准备门禁 | `tests/test_stop_recovery_contract.py` | 并发帧不被误判、真 stale 仍拒绝、旧会话帧不能支撑新 START、机械准备不等待测量、交接仍拒绝 |
-| ROS 停止结果与锁存 | 同上 `ConfirmedStopTests` | 旧 `cleanup_failed`/分光故障不否决本次成功 STOP、未确认仍失败、只写失败不算停止、不可恢复故障保留、ADS/全输出范围分开 |
+| ROS 就绪快照与准备门禁 | `tests/test_stop_recovery_contract.py` | 并发帧不被误判、真 stale 仍拒绝、旧会话帧不能支撑新 START、机械准备不等待测量、交接仍拒绝、后台 freshness 不取消慢准备、旧检查不能取消接替它的新任务 |
+| ROS 停止结果与锁存 | 同上 `ConfirmedStopTests` | 旧 `cleanup_failed`/分光故障不否决本次成功 STOP、未确认仍失败、只写失败不算停止、不可恢复故障保留、ADS/全输出范围分开、手动进样仍运行时只停分光不虚报全停 |
+| ROS 请求受理与回执 | `tests/test_payload_disk_stop.py` | 日志目录不可写/写入阻塞时普通命令与 STOP 仍有正确 ACK 且不触发维护锁；busy 拒绝立即产生关联 rejected + ACK；同身份重放原结果不重复执行；已拒绝身份在通道空闲后仍重放拒绝；31016 紧接 31019 两个 STOP 串行完成且各自结果保留 |
+| ROS 请求关联结构 | `tests/test_payload_protocol.py` | 内存去重、处理中返回、参数冲突拒绝、新任务不被淘汰、旧身份退休、终态保留、走航多 attempt 继续、日志故障不影响受理、重启不承诺精确一次 |
 | ROS 接收分帧 | `tests/test_mavlink_framing_contract.py` | 半帧/粘包、坏 CRC、未知消息 ID、合法外层帧 payload 内嵌命令不执行、BAD_DATA 不重连 |
-| QGC 控制器 | `custom/tests/tst_USVPayloadCommandController.qml` | Fault/Aborted 可恢复、多 STOP 各自结果、退休请求迟到终态、31018 已确认不锁船、进度续期与迟到结果 |
-| QGC 契约 | `custom/tests/test_usv_qgc_contract.py` | 期限常量、`allowed` 门禁、`expire` 的已接受/未知分支 |
+| QGC 控制器（真实 Qt Quick Test） | `custom/tests/tst_USVPayloadCommandController.qml` | accepted 结束接单等待、4.9s accepted/5.4s 状态不锁船、回执超时只结束等待且不伪造空闲、普通失败不锁船、失败后按当前 idle 状态恢复、31016→31019 两个命令各自结束且无遗留门禁、无身份兼容 STOP 用标准 ACK 结束等待、退休请求迟到终态只进历史、Fault/Aborted 仍可恢复 |
+| QGC 契约 | `custom/tests/test_usv_qgc_contract.py` | 期限常量、`allowed` 门禁、`expire` 的已接受/未收到回执分支（不再整船锁） |
 
-未执行：QGC 完整 C++ 构建（本机无 MSVC C++ 工具链）、Jetson ROS 运行、ESP32/飞控刷写、实船/台架。因此 `Vehicle.cc` 的提示抑制改动只经过源码核对，需在具备 Qt/MSVC 构建机的环境中确认编译。
+未执行：QGC 完整 C++ 构建、Qt on-device 运行、Jetson ROS 运行、ESP32/飞控刷写、实船/台架、抓包重放。本轮未修改 `Vehicle.cc`/`Vehicle.h` 与固件，`Vehicle` 的 ACK/期限行为按源码核对与既有契约测试确认。
 
 ### 台架最小清单
 
 | 端 | 必须核验的现象 |
 |---|---|
-| QGC | Fault(3) 状态下“核验并解除锁定”可见且给出未满足条件；核验→启动分光→设基线→点采样可连续完成；连续点停止采样/停止分光/急停各自出现独立结果，无永久 busy |
-| Jetson/ROS | 停止后 `USV_STAT` 回到 0 且 `terminal_reason` 仍可查；`bad_data` 计数在坏帧时增长但 TCP 会话不重连；准备阶段无测量也能完成归零/360°/油相分割 |
-| 检测板 | `ADS_OK:START` 后先出现 `starting`（`USV_VLD=0`），首帧到达才 `acquiring`；真实 I2C 错误记为错误而不是静默 |
+| QGC | 连续“准备→采样→停止→再次采样”无需重启进程；普通失败后停止确认即恢复准备，无需先急停或勾选现场核验；回执超时显示“未收到回执”但停止按钮仍可用；31016 后紧接 31019 两次都出现各自结果；真急停仍要求核验后才解除锁定 |
+| Jetson/ROS | 停止后 `USV_STAT` 回到 0 且 `terminal_reason` 仍可查；`~/.ros/usv_payload_requests.jsonl` 删除或不可写后命令照常执行；准备阶段无测量也能完成归零/360°/油相分割，交接前仍拒绝无有效测量 |
+| 检测板 | `ADS_OK:START` 后先出现 `starting`（`USV_VLD=0`），首帧到达才 `acquiring`；只按“停止信号”时泵仍在转是预期，`outputs_stop` 不得显示为真 |
 | 飞控 | 采样失败后 `USV_STAT` 不长期停留 3；`USV_SMPL/USV_DONE` 配对不因本次修复改变 |
 
 ## 跨端修复验证边界
