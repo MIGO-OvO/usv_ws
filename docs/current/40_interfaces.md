@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-19
+Updated: 2026-10-20
 
 ## ROS Launch
 
@@ -70,18 +70,18 @@ Updated: 2026-10-19
 
 “接单结果”与“动作完成”“输出停止确认”是三件事，不能互相冒充。标准 `COMMAND_ACK` 不带请求身份，只能作证据；关联判定只用 `USVE1` 事件的 session/request/command/sender。
 
-| 命令 | 关联接单结果 | 动作完成条件 | 状态变化 | QGC 期限（接单/执行静默） | 后端重试 | 失败后恢复 |
+| 命令 | 关联接单结果 | 动作完成条件 | 状态变化 | QGC 接单等待期限 | 后端重试 | 失败后恢复 |
 |---:|---|---|---|---|---|---|
-| 31010 | `request/accepted`＝启动准入通过 | `terminal`，或 accepted + 新状态进入采样 | `USV_STAT` 8→1/2 | 5s / 60s | 不自动 | 停止确认后按当前状态自动恢复；缺什么补什么 |
-| 31011 | `request/accepted`＝本次 `STOPALL_OK` | accepted 即完成（本次确认）；状态离开工作态为补充证据 | `USV_STAT`→0/12 | 15s / 15s | 可重发，同身份只重放结果 | 未确认时保持限制，确认后自动解除 |
-| 31012 | `request/accepted` | 状态进入 11 是异步证据，不是接单条件 | `USV_STAT`=11 | 5s / 15s | 不自动 | 用 31013 或 31011 |
-| 31013 | `request/accepted` | 状态回到 1/2 是异步证据 | `USV_STAT`=1/2 | 5s / 15s | 不自动 | 失败用 31011 |
-| 31014 | `request/accepted` | `terminal` | `USV_STAT`=4 | 5s / 60s | 不自动 | 31011 → 重新校准 |
-| 31015 | `request/accepted` | 每个 attempt 一个 `terminal` | `USV_STAT`=14 | 5s / 60s | 不自动 | 31016 或 31011 |
-| 31016 | `request/accepted`＝本次全输出停止确认 | accepted 即完成 | `USV_STAT`→0/9/12/13 | 15s / 15s | 可重发 | 失败按停止未知处理 |
-| 31017 | `request/accepted`＝基线命令成功 | `USV_BSET` 新序号（异步证据） | `USV_BSET`=1 | 5s / 15s | 不自动 | 等待有效帧后重设 |
-| 31018 | `request/accepted`＝启动命令成功（配置回显 + `ADS_OK:START`） | 就绪由 `USV_VLD` 新序号决定，不等于命令完成 | `USV_ADS` 2→3 | 40s / 30s | 不自动 | 无帧时按测量状态处理，不锁船 |
-| 31019 | `request/accepted`＝本次 `ADS_OK:STOP` | accepted 即完成 | `USV_ADS`=1 | 15s / 15s | 可重发 | 失败按停止未知处理 |
+| 31010 | `request/accepted`＝启动准入通过 | 对应 `terminal`；进入采样仅证明执行 | `USV_STAT` 8→1/2 | 5s | 不自动 | 停止确认后按当前状态恢复；缺什么补什么 |
+| 31011 | `request/accepted`＝本次 `STOPALL_OK` | accepted 即本次停止结果；当前新状态是恢复的补充证据 | `USV_STAT`→0/12 | 15s | 可重发，同身份只重放结果 | 通信锁可由本次结果及同步状态解除 |
+| 31012 | `request/accepted` | 状态进入 11 是异步证据，不是接单条件 | `USV_STAT`=11 | 5s | 不自动 | 用 31013 或 31011 |
+| 31013 | `request/accepted` | 状态回到 1/2 是异步证据 | `USV_STAT`=1/2 | 5s | 不自动 | 失败用 31011 |
+| 31014 | `request/accepted` | 对应 `terminal` | `USV_STAT`=4 | 5s | 不自动 | 31011 → 重新校准 |
+| 31015 | `request/accepted` | 每个 attempt 一个 `terminal`；成功样本不结束调度 | `USV_STAT`=14 | 5s | 不自动 | 31016 或 31011 |
+| 31016 | `request/accepted`＝走航停止结果 | 关闭走航调度并清理其采样；无走航时幂等成功 | `USV_STAT`→0/9/12/13（活动走航） | 15s | 可重发 | 不证明无关泵输出已停止，不能解除通信锁 |
+| 31017 | `request/accepted`＝基线命令成功 | `USV_BSET` 新序号（异步证据） | `USV_BSET`=1 | 5s | 不自动 | 等待有效帧后重设 |
+| 31018 | `request/accepted`＝启动命令成功（配置回显 + `ADS_OK:START`） | 首帧、基线另按真实测量判断 | `USV_ADS` 2→3 | 40s | 不自动 | 无帧时按测量状态处理，不锁船 |
+| 31019 | `request/accepted`＝本次 `ADS_OK:STOP` | accepted 即分光停止结果 | `USV_ADS`=1 | 15s | 可重发 | ADS-only 不证明泵已停止 |
 
 关联 `accepted` 就是该命令的接单答案：QGC 收到后结束发送等待，`pendingCommand` 清零，之后只按 ROS 当前状态与任务结果更新界面。`31010/31014/31015` 的 accepted 只表示任务已受理，不表示任务完成；`31011/31016/31019` 的 accepted 就是本次停止结果；`31018` 的 accepted 只表示启动命令成功，首帧与基线仍由 `USV_VLD`/`USV_BSET` 异步决定。
 
@@ -93,20 +93,22 @@ Updated: 2026-10-19
 |---|---|
 | 本请求的 `terminal` | 其后的新 Idle 使任务进入历史（原因保留）；`31015` 单次 attempt 的 `succeeded` 不算整体结束 |
 | 实际观察到运行（如 `USV_STAT` 进入采样/走航） | 其后的新 Idle 表示这次运行已经停下 |
-| 本船后续 STOP 的真实 accepted 结果（`31011/31016`） | 其后的新 Idle 允许结束被停止的物理任务 |
-| 完全没有回执的请求 | 只在“未收到回执”时刻之后读到的新 Idle 才算数 |
+| 本船后续 STOP 的真实 accepted 结果 | `31011` 可收敛输出任务；`31016` 仅收敛走航；需在该停止结果之后收到新 Idle |
+| 完全没有回执的请求 | 超时与同值 Idle 均不能单独证明结束；仍需运行后回空闲、终态或对应停止结果 |
 
 尚未被受理、没有终态、也没有停止结果的新 START：同值 Idle 不得结束接单等待、不得标记 `retired`、不得清空当前任务，也不得放行另一项互斥物理任务。只有确实结束或已确认停止的旧请求，其迟到事件才只进入历史。
 
 31016 后紧接 31019 是受支持的顺序：两个 STOP 各自返回 `request/accepted`，ROS 随后发布新的走航停止/空闲与分光停止状态，两个命令都正常结束，旧走航任务不再阻塞新任务。
 
-无关联身份的历史 STOP 只能按“兼容停止”降级处理：立即下发并只用标准 ACK 判定，不等待后端不会生成的关联事件；ACK 明确后结束对应的发送等待，停止情况按设备状态表达。已退休（`retired`）请求的迟到 accepted/progress/terminal 只更新历史，不得重开等待、覆盖已核验标志、覆盖已有终态或影响新任务。
+无关联身份的历史 STOP 只能按“兼容停止”降级处理：只用匹配 Vehicle/组件/命令的唯一在途标准 ACK 判定。`ACCEPTED` 保存到该请求并结束等待，`IN_PROGRESS` 继续等待，明确失败保留失败；后续遥测不得重新要求不会出现的 USVE1，也不得抹掉失败。`31019` 只表示分光范围。已退休（`retired`）请求的迟到 accepted/progress/terminal 只更新历史，不得重开等待、覆盖已核验标志、覆盖已有终态或影响新任务。
 
 ## MAVLink Named Values
 
-QGC 载荷响应期限分两层：接单等待（`31018` 40 秒、停止类 `31011/31016/31019` 15 秒、其余 5 秒）与执行期静默窗（停止 15 秒、启动 30 秒、采样类 60 秒）。只有本次请求的关联事件（新 seq 的 progress）才续期；本地心跳和重放旧事件不续期。期限不等于固定作业延迟，超时后迟到的合法关联结果仍按身份收敛。
+QGC 只保留接单等待（`31018` 40 秒、停止类 `31011/31016/31019` 15 秒、其余 5 秒），不存在执行静默窗或 progress 续期。accepted 或合法关联 progress 结束接单等待，后续按设备状态及任务事件更新。超时只提示“未收到回执”，迟到合法结果仍按身份归属。
 
-启动与停止的成功含义不同：`31018` 的关联 `request/accepted` 只表示启动命令成功（配置回显 + `ADS_OK:START`），有效帧与基线异步决定“采样就绪”；没有首帧不得把已成功的启动命令改判为未响应或锁定整船。停止类命令的关联 `accepted` 是本次停止动作的结果（`31011/31016` 需本次 `STOPALL_OK` 确认，`31019` 需本次 `ADS_OK:STOP` 确认），设备状态遥测是同一结果的补充证据。
+启动与停止的成功含义不同：`31018` 的关联 `request/accepted` 只表示启动命令成功（配置回显 + `ADS_OK:START`），有效帧与基线异步决定“采样就绪”；没有首帧不得把已成功的启动命令改判为未响应或锁定整船。`31011` 需本次 `STOPALL_OK`；`31016` 仅在走航拥有采样时要求该 attempt 的停止清理，无走航或尚未拥有采样时可本地幂等成功；`31019` 需本次 `ADS_OK:STOP`。不能把 `31016` 的无操作成功写成全输出物理确认。
+
+`31016` 仅在存在活动走航或普通通道已受理 `31015` 时推进现有 cancellation generation；通道记录涵盖已入队尚未执行的命令。走航正式激活、发布 `survey_started` 和启动 scheduler 与 STOP 准入共用 `_command_dispatch_lock`：STOP 先取消则旧 START 不激活；START 先激活则 STOP 能观察并关闭。无走航的 `31016` 不取消独立 `31018`。满队列拒绝及同身份重放不推进 generation。
 
 ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服务初始化不阻塞采样 owner 续约。自动化准备期间使用现有 `USV_STAT=8`（准备/稳定等待），QGC 主动作提供停止准备，准备结束后进入采样状态才可暂停。QGC 手动点采样采用 Web 自动进样泵策略的速度，进样泵在准备完成后开启。
 
@@ -173,7 +175,7 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 
 后台分光新鲜度检查与前台准备共用同一“当前阶段是否依赖测量”的判断：机械准备（归零、360°、油相 X 圈、进样预启动）期间分光短暂无帧只更新分光状态，不会升级为 `_controller_fault`，也不会取消准备；只有正式采集阶段才按既有业务规则结束或暂停本次采样。
 
-每条测量结论都与取得它时的测量会话和任务绑定，并在产生任何副作用之前重验：串口会话对象、`start_ack_at`（测量会话）、`last_valid_at`（期间是否已收到更新的有效帧）、分光状态、取消 generation 与 `attempt_id`。任何一项在观察之后发生变化，本轮决定作废，由下一轮检查按当前事实重新判断。因此同一 attempt 从机械准备交接进入正式采集、或旧任务停止后新任务凭新帧和新基线启动时，迟到的旧检查不会把新数据显示成 stale，也不会取消/停止新任务。重验与停止认领在同一临界区内完成（`_control_lock → serial_lock`，短暂），随后的阻塞停止确认不再持有 `serial_lock`。
+测量快照在读取测量值时一并捕获取消 token、`attempt_id` 和当时需要测量的 owner（机械 PRE 为 None），之后才取比较时钟。产生 stale、数据失效或停止副作用之前，重验串口对象、`start_ack_at`、`last_valid_at`、分光状态、显式故障、任务 token/attempt 与阶段归属；任何变化均放弃旧结论。这样既保护替换任务，也保护同一 runtime 的新帧与聚合状态。重验、状态提交与停止认领使用 `_control_lock → serial_lock`；阻塞 ACK 确认及 join 前释放 `serial_lock`，并以 finally 完成 STOP 收尾。快照函数本身不获取 `_control_lock`。
 
 QGC 侧的三类信息严格分开：
 
@@ -183,7 +185,9 @@ QGC 侧的三类信息严格分开：
 | 当前设备状态 | 空闲、准备、运行、暂停、当前故障、分光就绪 | 决定当前可用的操作入口 |
 | 历史任务结果 | 上次成功、失败、取消及原因 | 展示历史，不再锁住当前操作 |
 
-普通通信异常（回执超时、状态稍晚、分光暂无数据、基线失败、命令被拒绝、失败但已确认停止）只结束本次发送等待或写入历史，不再自动设置整船锁；只有“未能确认的输出停止”（`cleanup_failed`）和“任务可能仍在运行时链路丢失”才进入整船锁定与人工核验。正常停止确认后，准备入口自动恢复：只需补齐当前真正缺少的条件（分光未启动则启动、基线按既有测量会话规则失效则重设），不需要先触发急停、解除推进武装或每次勾选现场核验。
+回执超时、状态稍晚、分光暂无数据、基线失败、命令被拒绝、失败但已确认停止只影响本请求或历史。任务可能仍在运行且整条 MAVLink 连接断开时，Vehicle 原锁记录来源 `communication`；`cleanup_failed` 为 `outputs`，主动急停为 `emergency`。来源与原 Vehicle 锁共享生命周期，通信丢失不能覆盖已有急停/输出停止未知来源。
+
+通信恢复后，新发出的有关联身份 `31011` 取得本次 accepted（真实 `STOPALL_OK`）、其传输 pending 已结束，且随后收到新的当前空闲状态时，自动解除通信锁并退休旧任务/请求。保持 armed 也可恢复分光准备；不自动 arm/disarm，不改模式，不宣称推进停止。仅重连、Idle、断连前 STOP 的迟到结果、`31019` 或无走航 `31016` 均不足以解锁；仅 ROS 载荷离线而飞控连接仍在线不新增整船锁。主动急停与未确认输出停止保留原飞控 disarm 和现场勾选核验流程。
 
 bridge 诊断 JSON 增加只读字段 `bad_data`（按 `bad_crc`/`unknown_message_id`/`bad_length`/`bad_signature`/`other` 分类的计数）与 `bad_data_last_reason`。已拒绝的入站帧只计数，不重连、不清账本、不执行其 payload 内部字节。
 
@@ -191,13 +195,23 @@ bridge 诊断 JSON 增加只读字段 `bad_data`（按 `bad_crc`/`unknown_messag
 
 常规显示遥测共 26 项；`USV_SMPL/SURV/DONE/FAIL` 是控制事件，不计入显示字段数。ROS 按源回调与字段年龄发送，失效 VLD/BSET/ADS 发 0；飞控每字段 3 秒 TTL、各链路独立游标、txspace 不足时不推进待发字段。QGC 同值重发也增加字段接收序号，5 秒本地 TTL 不是原测量时间。
 
-`COMMAND_LONG 31010..31019` 的 param3=request、param4=session，均为 1..16777215 的精确整数，param1/2 不变。QGC 用文件计数器分配身份，ROS 只在内存里做会话内去重与结果重放：同身份同参数重传重放原 ACK 与原事件（含原 seq），处理中回 `IN_PROGRESS`；同身份不同参数明确拒绝且不破坏原记录；已拒绝身份即使通道空转也继续重放拒绝。请求关联不再以磁盘写入成功为前提，也不跨进程重启承诺精确一次：重连后重新同步设备状态，旧 START 不自动续发。旧协议仅允许尝试停止。
+`COMMAND_LONG 31010..31019` 的 param3=request、param4=session，均为 1..16777215 的精确整数，param1/2 不变。QGC 用文件计数器分配身份，ROS 只在内存里做会话内去重与结果重放。同身份同参数重传保留原事件、原 seq/attempt_id/结果，不执行 handler、不重新入队、不推进 generation；ACK 根据缓存事件的阶段返回：
+
+| 缓存事实 | 重放标准 ACK |
+|---|---|
+| 在途，尚无事件；或 `phase=progress` | `IN_PROGRESS`（5） |
+| `request/accepted` | `ACCEPTED`（0） |
+| `request/rejected` | `TEMPORARILY_REJECTED`（1） |
+| `terminal/succeeded` | `ACCEPTED`（0） |
+| 实际 failed/cancelled | 原失败语义 `FAILED`（4） |
+
+同身份不同参数明确拒绝且不破坏原记录；已拒绝身份即使通道空闲也继续重放拒绝。JSONL 仅为尽力写入的诊断日志，不参与准入、STOP 或通道释放。请求关联不跨进程重启承诺精确一次：重连后重新同步设备状态，旧 START 不自动续发。旧协议仅允许尝试停止。
 
 ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份，只作证据；任务成功必须是关联终态。停止每 5 秒重试且总期限 15 秒；非停止载荷命令不自动重试。
 
 普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；32 请求/30 秒缓存不变。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
 
-trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `TEMPORARILY_REJECTED` 标准 ACK 外，还会立刻产生与请求身份关联的 `phase=request, outcome=rejected, reason=command_lane_busy`，直接走已有发布路径，不再需要单独的持久化拒绝线程，因此不会出现“无人负责、无结果、重试又被静默吞掉”的 reservation。STOP 不因通道占用被拒绝：同类重复与不同范围的 STOP 在有界安全通道里串行完成，各请求保留自己的结果；STOP 的执行、回执与通道释放都不等待日志落盘。后端拒绝时 `request/failed` 的 `reason` 保留控制服务的具体消息（例如 `spectrometer_not_ready: ...`），不再统一压成 `command_rejected_or_cancelled`。
+trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `TEMPORARILY_REJECTED` 标准 ACK 外，还会立刻产生与请求身份关联的 `phase=request, outcome=rejected, reason=command_lane_busy`，直接走已有发布路径，不再需要单独的持久化拒绝线程，因此不会出现“无人负责、无结果、重试又被静默吞掉”的 reservation。STOP 不被普通通道占用阻挡，在有界安全通道中串行执行；安全队列满时明确拒绝，且不推进 cancellation generation。同身份重传重放既有结果，各个已受理请求保留自己的结果；STOP 的执行、回执与通道释放都不等待日志落盘。后端拒绝时 `request/failed` 的 `reason` 保留控制服务的具体消息（例如 `spectrometer_not_ready: ...`），不再统一压成 `command_rejected_or_cancelled`。
 
 请求日志（`~command_ledger`，默认 `~/.ros/usv_payload_requests.jsonl`）只是诊断轨迹：目录不可写、文件被关闭或写入抛 `OSError` 时仅记录一次告警并继续运行，不影响命令受理、STOP 或通道释放，也不会触发任何控制维护锁。日志只记录已产生的请求与结果，不生成身份、seq 或唯一回执。
 
