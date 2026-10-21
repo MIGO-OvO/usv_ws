@@ -21,7 +21,8 @@ Updated: 2026-10-21
 
 | 名称 | 类型 | 方向 | 说明 |
 |---|---|---|---|
-| `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | `[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp,request,session,tcp_session]`；兼容旧 7 元内部事件 |
+| `/usv/payload_command` | `String(JSON)` | bridge -> trigger | `{executor, values:[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp,request,session,tcp_session]}`，固定首次转发的执行实例 |
+| `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | 旧 7 元飞控内部事件、无关联兼容 STOP；关联请求须经执行实例封装 |
 | `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | `[cmd,result,target_sys,target_comp,tcp_session]`，过滤旧 TCP 会话；兼容旧 4 元 ACK |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
 | `/usv/sampling_result` | `String(JSON)` | trigger -> bridge/Web | 各 trigger 来源的 `attempt_id/source/outcome/reason` 最终结果；FCU 另带整数 1..65535 的 `sample_id`；非 latched |
@@ -85,7 +86,9 @@ Updated: 2026-10-21
 
 关联 `accepted` 就是该命令的接单答案：QGC 收到后结束发送等待，`pendingCommand` 清零，之后只按 ROS 当前状态与任务结果更新界面。`31010/31014/31015` 的 accepted 只表示任务已受理，不表示任务完成；`31011/31016/31019` 的 accepted 就是本次停止结果；`31018` 的 accepted 只表示启动命令成功，首帧与基线仍由 `USV_VLD`/`USV_BSET` 异步决定。
 
-接单超时只结束本次发送等待：界面标记“未收到回执”，保留停止入口，继续接收 ROS 状态，不设置整船锁，也不自动补发 START。
+关联 USVE1 同时结束原生队列和 QML 收执等待；按钮直接绑定原生 `pendingMavCommands` 通知。标准 ACK 不释放或续期关联请求，迟到旧 ACK 无法清除后续同 command 的新请求。接单超时显示“响应超时”，保留停止入口、任务身份与后续状态，不设置整船锁，也不创建新 START 请求。
+
+Web `/api/calibration/start` 与 QGC 31014 统一调用泵节点 `calibration_start`，从 Web 保存的 `calibration.json` 读取所选轴零点，使用新鲜原始角度计算最短相对 R/PID，逐轴真实 PID_DONE 后完成。缺失标定或过期角度拒绝运动，失败/取消沿用 STOPALL_OK 核验。独立回零只做 PIDQUERY 屏障与回零；自动化仍保留回零、正转360°补偿、油相分隔。Web 修改零点后立即更新快照，bridge 每次发送显示帧重读同一文件，内部原始角度不扣偏移。
 
 `status` 的接收序号是客户端计数，`USV_STAT` 数值不变也会递增，因此“收到一帧 Idle”本身不能证明某个任务已经结束。旧任务自动进入历史必须有自己的结束依据，且该依据必须早于用来判定的那帧 Idle：
 
@@ -122,7 +125,7 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 |---|---|
 | `USV_VOLT` | 分光电压 |
 | `USV_ABS` | 吸光度 |
-| `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` | 四轴泵角度 |
+| `PUMP_X` `PUMP_Y` `PUMP_Z` `PUMP_A` | 保存零点下的相对角度 `[0,360)`；未校准为 -1，QGC 显示“未校准”（Web 使用 null） |
 | `USV_STAT` | 任务状态码 |
 | `USV_PKT` | bridge 发送包计数 |
 | `USV_STEP` | 当前自动化步骤 |
@@ -211,9 +214,9 @@ bridge 诊断 JSON 增加只读字段 `bad_data`（按 `bad_crc`/`unknown_messag
 | `terminal/succeeded` | `ACCEPTED`（0） |
 | 实际 failed/cancelled | 原失败语义 `FAILED`（4） |
 
-同身份不同参数明确拒绝且不破坏原记录；已拒绝身份即使通道空闲也继续重放拒绝。JSONL 仅为尽力写入的诊断日志，不参与准入、STOP 或通道释放。请求关联不跨进程重启承诺精确一次：重连后重新同步设备状态，旧 START 不自动续发。旧协议仅允许尝试停止。
+同身份不同参数明确拒绝且不破坏原记录；已拒绝身份即使通道空闲也继续重放拒绝。JSONL 仅为尽力写入的诊断日志，不参与准入、STOP 或通道释放。trigger capability 含本次进程的 executor（32 位 hex）；bridge 用 RequestLedger 固定请求归属并通过内部封装携带。trigger 重启但 bridge/TCP 未重连时，旧请求返回 `executor_restarted`；即使新 capability 尚未到 bridge，trigger 也拒绝旧实例封装。不能跨执行实例续跑；恢复须同步设备状态。旧协议仅允许尝试停止。
 
-ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份，只作证据；任务成功必须是关联终态。停止每 5 秒重试且总期限 15 秒；非停止载荷命令不自动重试。
+ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份；任务成功必须是关联终态。comp191 关联请求以 1 秒间隔最多发送三份原身份/参数帧；普通总预算 5 秒、STOP 15 秒、31018 40 秒，末次发送保留剩余等待预算。仅载荷链路使用此策略；受理结束重传，物理任务继续由进度和终态更新。
 
 普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；32 请求/30 秒缓存不变。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
 
