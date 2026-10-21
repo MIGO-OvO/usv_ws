@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-21
+Updated: 2026-10-22
 
 ## ROS Launch
 
@@ -60,7 +60,7 @@ Updated: 2026-10-21
 | 31011 | 停止采样 | `mavlink_trigger_node.py` |
 | 31012 | 暂停采样 | `mavlink_trigger_node.py` |
 | 31013 | 恢复采样 | `mavlink_trigger_node.py` |
-| 31014 | 校准/`CALXYZA` | `mavlink_trigger_node.py` -> `/usv/pump_command` |
+| 31014 | 回保存的相对零点 | `mavlink_trigger_node.py` -> `calibration_start` -> 相对 R/PID |
 | 31015 | 开始走航采样 | `mavlink_trigger_node.py` |
 | 31016 | 停止走航采样 | `mavlink_trigger_node.py` |
 | 31017 | 设置分光基线 | `mavlink_trigger_node.py` |
@@ -88,7 +88,15 @@ Updated: 2026-10-21
 
 关联 USVE1 同时结束原生队列和 QML 收执等待；按钮直接绑定原生 `pendingMavCommands` 通知。标准 ACK 不释放或续期关联请求，迟到旧 ACK 无法清除后续同 command 的新请求。接单超时显示“响应超时”，保留停止入口、任务身份与后续状态，不设置整船锁，也不创建新 START 请求。
 
+原生队列释放时，有 handler 的请求回调 handler；无 handler 的请求发出 `mavCommandResult`，驾驶舱急停据此结束本次载荷等待。停止命令的 `progress` 保留原生待项并通知 IN_PROGRESS，关联 accepted/失败才给出停止结果。基线、分光、暂停/恢复和停止在匹配新遥测后显示具体已确认状态。
+
+泵 `automation_start` 返回同 attempt 的 `admission=rejected/owned`；异常或回包身份不匹配视为 unknown。trigger 保留启动首因，`cleanup_result` 单独进入日志、采样记录和 `/usv/sampling_result`。清理先登记取消：明确未准入为 `not_admitted`，未知请求当前无 owner 为 `not_owned`，其他 owner 已接管为 `superseded`，owner 匹配后完成停止确认为 `stopped`；前两项不表示全局硬件停止。未知 RPC 仍按 attempt 核验清理，迟到 START 受取消登记拦截。
+
+启动在 `sampling_started` 前失败时，Web 按匹配上下文和最终结果保存失败窗口；支持两者任意顺序，重复结果不重复建档。任务 JSON 与 `sample_results.csv` 保留首因、准入状态和独立清理明细。
+
 Web `/api/calibration/start` 与 QGC 31014 统一调用泵节点 `calibration_start`，从 Web 保存的 `calibration.json` 读取所选轴零点，使用新鲜原始角度计算最短相对 R/PID，逐轴真实 PID_DONE 后完成。缺失标定或过期角度拒绝运动，失败/取消沿用 STOPALL_OK 核验。独立回零只做 PIDQUERY 屏障与回零；自动化仍保留回零、正转360°补偿、油相分隔。Web 修改零点后立即更新快照，bridge 每次发送显示帧重读同一文件，内部原始角度不扣偏移。
+
+独立校准中，Web 与 ROS 的 `injection_off` 仅停进样泵，继续监控校准；全局 STOP 才取消校准并确认四轴停止。
 
 `status` 的接收序号是客户端计数，`USV_STAT` 数值不变也会递增，因此“收到一帧 Idle”本身不能证明某个任务已经结束。旧任务自动进入历史必须有自己的结束依据，且该依据必须早于用来判定的那帧 Idle：
 
@@ -111,7 +119,7 @@ STOP 无论仍为当前请求还是已进入 history，合法 accepted 都先写
 
 ## MAVLink Named Values
 
-QGC 只保留接单等待（`31018` 40 秒、停止类 `31011/31016/31019` 15 秒、其余 5 秒），不存在执行静默窗或 progress 续期。accepted 或合法关联 progress 结束接单等待，后续按设备状态及任务事件更新。超时只提示“未收到回执”，迟到合法结果仍按身份归属。
+QGC 只保留接单等待（`31018` 40 秒、停止类 `31011/31016/31019` 15 秒、其余 5 秒），不存在执行静默窗或 progress 续期。accepted 或物理任务的合法关联 progress 结束接单等待；停止命令等关联结果，后续按设备状态及任务事件更新。超时只提示“响应超时”，迟到合法结果仍按身份归属。
 
 启动与停止的成功含义不同：`31018` 的关联 `request/accepted` 只表示启动命令成功（配置回显 + `ADS_OK:START`），有效帧与基线异步决定“采样就绪”；没有首帧不得把已成功的启动命令改判为未响应或锁定整船。`31011` 需本次 `STOPALL_OK`；`31016` 仅在走航拥有采样时要求该 attempt 的停止清理，无走航或尚未拥有采样时可本地幂等成功；`31019` 需本次 `ADS_OK:STOP`。不能把 `31016` 的无操作成功写成全输出物理确认。
 

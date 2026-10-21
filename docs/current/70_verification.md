@@ -1,6 +1,24 @@
 # 验证矩阵
 
-Updated: 2026-10-21
+Updated: 2026-10-22
+
+## 点采样首因与驾驶舱回执（2026-10-22）
+
+源码基线为 ROS `c627c98e`（含 #93）与 QGC `47874186`（含 #19）。本地复现了清理覆盖首因、校准局部 OFF 取消监控、驾驶舱漏收关联结果和成功反馈倒退。就绪条件下首次手动点采样进入 homing，航行 Manual 不等于泵手动模式。尚未取得本次 Jetson 日志、现场配置和部署 SHA，现场首次启动拒绝原因待核实。
+
+修复提交：ROS `85be8237`（[#94](https://github.com/MIGO-OvO/usv_ros/pull/94)）、QGC `d291f5465`（[#20](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/pull/20)）。
+
+| 验证 | 结果 |
+|---|---|
+| ROS 准入/清理/校准/STOP/测量/账本及 Web 记录，23 个相关模块 | 302 项：301 通过、1 跳过（真实 pymavlink 链路用例需独立环境） |
+| QGC 生产 QML 回归 | 87 通过 |
+| QGC 角度、Android 转发与其他既有契约 | 37 通过 |
+| 真实 Vehicle/FactGroup 的 SendMavCommandWithSignallingTest | 13 通过，含实际驾驶舱 emergencyStop 与 Button.enabled 绑定 |
+| Windows | 复用 Qt 6.10.1/MSVC 14.51 Debug 目录，编译/链接成功，新产物在 `Debug-manual-sampling`，保留运行中的旧窗口 |
+| Android | 本机无 Android Kit；[本轮 QGC head CI](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39681514982) 发布时运行中；显式 OFF 的多 ABI 验收待执行 |
+| 根文档与跨仓源码契约 | 11 通过，Source contracts match |
+
+台架须核对同次 attempt 的准入日志、泵手动状态/故障/owner 和实际配置；依次验证首次点采样准备、校准中局部 OFF、全局 STOP 确认、驾驶舱急停与下一次操作。成套更新 ROS/QGC；本轮未部署、未修改或烧录固件，Web 前端与 `static/dist` 无改动。
 
 ## 重叠停止与历史反馈（2026-10-21）
 
@@ -41,10 +59,16 @@ Updated: 2026-10-21
 
 ### 相对零点与传输回归
 
+- ROS `test_manual_sampling_admission.py`：真实 trigger RPC 与 pump 准入，覆盖首次就绪启动、空/旧 owner、泵手动模式/故障/忙碌/非法配置、未知 RPC 后按 attempt 清理、迟到 START 与 STOP；核对事件、采样记录和最终结果首因一致。
+- ROS `test_recording_terminal_result.py`：早期拒绝在 `sampling_started` 前落盘，覆盖上下文/结果两种顺序、重复与旧结果隔离、重载及 CSV 导出中的首因与清理明细。
+- ROS `test_calibration_lifecycle.py`：从 Web、ROS 服务与统一控制入口在校准中关闭进样泵，保留校准 token 和轴完成监控；全局 STOP 的确认与迟到 PID_DONE 隔离保留。
+- QGC `SendMavCommandWithSignallingTest::_cockpitEmergencyStopReceipts`：实际调用驾驶舱 `emergencyStop()`，真实 Vehicle/FactGroup 驱动成功/失败、ACK/USVE1 两种顺序、progress 与旧 ACK，检查 `payloadPending/emergencyPhase/canVerifyStop`。
+- QML `test_confirmedFeedback`：七类命令各覆盖 accepted/新遥测两种到达顺序；角度契约覆盖数据页、实时条、流程页和详情页的“未校准”。
+
 - ROS `test_calibration_lifecycle.py`、`test_preflight_web_contract.py`：不同轴非零偏移、跨0°、未校准、保存/重启显示一致、真实 PID_DONE、STOP/超时/断线、清理失败不能先发成功终态，以及同身份重传仅下发一次相对运动。
 - ROS `test_payload_event_bridge.py`：请求/回执丢失、RequestLedger 重放、trigger 单独重启、capability 到达顺序与旧实例拒绝。
 - QGC `SendMavCommandWithSignallingTest::_payloadReceiptOrderingAndButtons`：真实 Vehicle + FactGroup 分帧 + Button.enabled，覆盖 ACK/USVE1 两种顺序、旧 ACK/旧事件、同 command 连续请求、STOP、有限重传和原生超时释放。QML mock 测试只作控制器回归。
-- 构建以 Windows/Android 为限。USV 默认 `DISABLE_SPEECH=ON`；同时核对 OFF 语音路径、ON 无 TextToSpeech 导入及 Windows 部署依赖，其他 Multimedia 功能保留。`AudioOutputTest::_speechConfiguration` 验证禁用接口、隐藏设置与声音起航检查。
+- 构建以 Windows/Android 为限。USV 默认 `DISABLE_SPEECH=ON`；同时核对 OFF 语音路径、ON 无 TextToSpeech 导入及 Windows 部署依赖，其他 Multimedia 功能保留。`AudioOutputTest::_speechConfiguration` 验证禁用接口、隐藏设置与声音起航检查；Android 多 ABI 转发 `DISABLE_SPEECH`，包括显式 OFF。
 - 台架仍须验证两端回到同一保存零点、R0/跨0°的真实完成、回零中 STOP 与断线看门狗、丢包重传物理动作一次，以及校准单独回零/自动化补偿分隔各自范围。离线通过不替代 Jetson、Android 或设备验收。
 
 ## 停止恢复闭环验证边界（2026-10-20）
@@ -161,7 +185,7 @@ Updated: 2026-10-21
 | QGC 冷启动 | ROS 启动后立即点击启动信号 | bridge 不等待飞控心跳才开始接收；采样 owner 在 MAVROS 初始化等待期间仍每秒续约；31018 的关联 accepted 确认启动命令成功（配置回显 + ADS_OK:START），首帧与基线由遥测另行决定采样就绪 |
 | QGC 点采样进样 | Web 自动进样策略设不同于 `default_speed` 的速度，QGC 启动点采样 | 准备完成后按策略速度开启进样泵；准备时不提供暂停，主按钮可停止准备 |
 | QGC 普通停止 | 准备、采样、暂停阶段分别点击 `31011` | 取消当前流程并请求全部输出停止；关联终态/清理结果与实物停止分别确认，标准 ACK 不代替它们；不依赖紧急停止；Web 记录窗口按匹配结果关闭 |
-| 校准命令 | QGC 发送 `31014` | `/usv/pump_command` 出现 `CALXYZA` |
+| 校准命令 | QGC 发送 `31014` | `calibration_start` 读取保存零点，发送相对 R/PID 并等待各轴 PID_DONE |
 | 遥测字段 | 运行 bridge | QGC 显示 26 字段；固件 2 Hz 公平转发，停源后不续旧值 |
 | 健康遥测 | 运行 system health + bridge | QGC 显示 `USV_JTMP/ETMP/JCPU/JMEM/EHEAP` 对应 Fact |
 | 电台链路 | RADIO_STATUS 输入 | `/usv/radio_status` 有 rssi/remrssi/noise 等字段 |
