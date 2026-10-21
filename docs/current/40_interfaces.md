@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-20
+Updated: 2026-10-21
 
 ## ROS Launch
 
@@ -93,12 +93,16 @@ Updated: 2026-10-20
 |---|---|
 | 本请求的 `terminal` | 其后的新 Idle 使任务进入历史（原因保留）；`31015` 单次 attempt 的 `succeeded` 不算整体结束 |
 | 实际观察到运行（如 `USV_STAT` 进入采样/走航） | 其后的新 Idle 表示这次运行已经停下 |
-| 本船后续 STOP 的真实 accepted 结果 | `31011` 可收敛输出任务；`31016` 仅收敛走航；需在该停止结果之后收到新 Idle |
+| 发送时针对该任务的 STOP 真实 accepted 结果 | `31011` 可收敛输出任务；`31016` 仅收敛走航；需在该停止结果之后收到新 Idle |
 | 完全没有回执的请求 | 超时与同值 Idle 均不能单独证明结束；仍需运行后回空闲、终态或对应停止结果 |
 
 尚未被受理、没有终态、也没有停止结果的新 START：同值 Idle 不得结束接单等待、不得标记 `retired`、不得清空当前任务，也不得放行另一项互斥物理任务。只有确实结束或已确认停止的旧请求，其迟到事件才只进入历史。
 
-31016 后紧接 31019 是受支持的顺序：两个 STOP 各自返回 `request/accepted`，ROS 随后发布新的走航停止/空闲与分光停止状态，两个命令都正常结束，旧走航任务不再阻塞新任务。
+31016 后紧接 31019（前者尚无 ACK/accepted）是受支持的重叠操作。STOP 发送时保存原物理任务的请求引用，以既有 `sameRequest()` 比较 Vehicle、session、request、command 和发送方身份；走航调度身份不等于其中一次采样的 `attempt_id`。
+
+STOP 无论仍为当前请求还是已进入 history，合法 accepted 都先写回自己的记录，再按命令范围给发送时目标任务建立停止依据。使用结果到达时的 `evidenceStatus`，之后收到符合规则的新静止状态才退休该任务；结果以前收到的 Idle 不作证明。历史 STOP 不改写当前请求的提示、pending 或结果；目标已结束、后来启动了新任务时，旧 STOP 不能作用于新任务。`31019` 单独成功只证明分光停止，不能结束走航占用、证明全泵停止或解除输出未知锁。
+
+已退休且 `cleanup_failed=false` 的普通失败继续保留终态、原因、阶段和请求身份，但不再由 `activeFailure()` 占据新任务的 `feedback/warning/taskFailed`；新任务按自己的发送、accepted、progress 和终态显示。尚未解除的 `cleanup_failed`、输出停止未知与主动急停保留原限制，不清空 history、不伪造 `physicalStopVerified`，也不在新 START 时清除 Vehicle 锁。
 
 无关联身份的历史 STOP 只能按“兼容停止”降级处理：只用匹配 Vehicle/组件/命令的唯一在途标准 ACK 判定。`ACCEPTED` 保存到该请求并结束等待，`IN_PROGRESS` 继续等待，明确失败保留失败；后续遥测不得重新要求不会出现的 USVE1，也不得抹掉失败。`31019` 只表示分光范围。已退休（`retired`）请求的迟到 accepted/progress/terminal 只更新历史，不得重开等待、覆盖已核验标志、覆盖已有终态或影响新任务。
 
@@ -153,7 +157,9 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 | 归零 → 360° 补偿 → 油相 X 圈 → 进样预启动 | 串口会话、取消请求、真实泵角度反馈、PID 完成、owner 心跳；**不要求**测量新鲜 |
 | 交接给正式采样（preflight `verifying`） | 再次确认当前会话真实帧 + 基线；stale 但不能证明有效的数据不足以进入正式采集 |
 
-`ADS_OK:START` 只确认启动命令，不写入最后有效测量时间；首帧前 `spectro_state=starting` 且 `USV_VLD=0`。首帧宽限为 `max(measurement_timeout, 4s)`，超时按 `spectrometer_frame_timeout` 处理。真实 I2C/串口故障仍立即中止并停止输出。
+`ADS_OK:START` 只确认启动命令，不写入最后有效测量时间；首帧前 `spectro_state=starting` 且 `USV_VLD=0`。首帧宽限为 `max(measurement_timeout, 4s)`，超时按 `spectrometer_frame_timeout` 处理。
+
+分光测量错误（如帧中的 I2C 错误、未配置或测试数据）先使测量失效；只有当前阶段需要测量时，才锁存分光故障并通知原 worker 终止及停止清理。机械 PRE 不因分光测量不可用而取消，正式交接仍重验真实帧和基线。控制串口读写故障则取消当前动作、锁存断线并进入重连与停止清理；串口不可用时不能声称输出已取得物理停止确认。二者不是同一个故障范围。
 
 停止结果只依据**本次**停止动作与本次确认，历史 `terminal_reason`、历史 `cleanup_failed`、已处理的分光故障不再否决本次成功停止。本次 `STOPALL_OK`（来自本次有效串口会话且经 `PIDQUERY` 排空旧回复）确认后清除可恢复锁存并发布当前静止状态，同时保留历史失败原因：
 

@@ -1,6 +1,43 @@
 # 验证矩阵
 
-Updated: 2026-10-20
+Updated: 2026-10-21
+
+## 重叠停止与历史反馈（2026-10-21）
+
+本轮只改 QGC 请求归属和反馈筛选，以及相关测试、文档；不修改 ROS、Vehicle C++、飞控或固件。下方 2026-10-20 数量属于此前记录，不代表本轮 head 的验证。
+
+| 场景 | 行为入口与断言 |
+|---|---|
+| R1-A/B 真正重叠 STOP | Qt `test_overlappingSurveyAndDetectorStops` 两个数据行：走航一次 succeeded 后仍在轮次间隔，先连续发送 31016/31019，再按两种顺序交付各自 ACK/accepted；各存结果、清传输 pending、建立原走航停止依据；结果前 Idle 不退休，结果后新 Idle 才退休，无需第二次 STOP 即可新采样 |
+| R1-C 旧 STOP 迟到 | `test_lateSurveyStopCannotStopANewerSample`：旧走航结束、旧 STOP 结束等待、新采样发出并运行后，旧结果只更新自身历史，不改新任务身份、停止依据、反馈、warning 或 pending |
+| R1-D 分光范围 | `test_detectorStopAloneCannotCloseSurvey`：31016 尚无结果或明确拒绝时，仅 31019 accepted/ADS=1 及重复 Idle 均不能结束走航或确认泵停止；兼容 31016 路径也经过原信号与遥测 |
+| R2-E 完整重新采样 | `test_retiredFailureDoesNotOverrideACompleteNewSamplingCycle`：普通失败→Idle 退休→31011 确认及新 Idle→31018 与有效帧→31017 基线→新 31010 accepted/运行/progress；读取真实 QML 绑定的 feedback/warning/taskFailed；旧终态、原因和阶段仍在 history，不伪造核验；旧迟到终态不覆盖当前请求 |
+| R2-F 当前失败与实际限制 | 同一用例确认新任务自身失败仍显示；`test_retiredCleanupFailureStillRequiresVerifiedStop` 确认退休的 cleanup_failed 仍保持 outputs 锁及提示；复用现有主动急停与通信恢复行为检查 |
+
+### 本轮验证分类
+
+| 类型 | 实际入口 | 本轮结果/边界 |
+|---|---|---|
+| 真实 Qt 定向红绿 | `qmltestrunner -input custom/tests/tst_USVPayloadCommandController.qml` | 修复前 44 通过、3 失败：两种重叠顺序均缺 stoppedByRequest，重新采样仍显示旧失败；修复后 48 通过、0 失败/跳过（含补齐的兼容走航停止） |
+| 真实 Qt 最终回归 | Qt 6.10.1 `qmltestrunner -input custom/tests`，offscreen/software | 72 通过、0 失败、0 跳过；PayloadController 48 项；本轮源码批次对应 QGC `716df904c8e856029ab4f9a9aad5d6af7b118437` |
+| Python/Node 契约 | `python -B -m unittest discover -s custom/tests -p test_usv_qgc_contract.py` | 35 通过、0 失败/跳过；不等同 Qt 信号、绑定或 C++ 集成 |
+| PySide6 行为 | 复用 `CockpitFixture.qml::verifyBehavior()`，仅运行行为入口 | Qt 6.10.1，60 项既有行为检查通过、无 QML 运行错误；未运行全视口截图，Vehicle 为 mock |
+| Windows | `VsDevCmd.bat -arch=x64 -host_arch=x64 -vcvars_ver=14.44` 后 `cmake --build build/audit-debug-20261018-v2 --parallel 6` | 本轮 QGC head 的 Qt 6.10.1/MSVC 14.44 Debug 增量编译/链接成功（exit 0），含修改后的 QML 资源；无 C++ 改动，未扩大原生测试；发布时[当前 head CI](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39542755570) 运行中 |
+| Android | 现有 Android 工作流的本轮 head | 发布时 [PR run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39542755710) 与 [push run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39542751177) 运行中，均由现有触发规则自动产生；未手动重复触发，未完成不能写通过 |
+| 文档与源码契约 | `python docs/tools/check_workspace_compatibility.py`；`python -B -m unittest discover -s docs/tools` | Source contracts match；11 通过、0 失败/跳过；各仓 diff --check 通过 |
+| 串口、台架、实机、抓包重放 | 本轮未执行 | 自动化与构建不替代现场验收；未部署、未刷写 |
+
+### 构建与 CI 范围
+
+长期规则见 `10_agent.md` 的“QGC 构建与 CI 验收”。构建验收只看 **Windows/Android 目标产物**；Ubuntu/macOS runner 或 Docker 构建 Android 仍计入。其他平台产物不排查详细失败、不修依赖、不重跑、不轮询等待，不作为本轮交付阻塞。保留改动相关的 QML/Python/ROS 逻辑验证，本轮不跑无关 ROS 全量回归。
+
+复用现有工具链、目录和矩阵，定向验证后对最终修改批次构建；同 head 不重复触发，代码或明确环境修正后才重跑相关失败，不用空提交或连续重跑刷绿。旧全仓 lint 只记录，本轮引入问题就地修正。推送后与交付前必要时查看相关状态，长时间排队/运行则如实交付链接；旧 head 的绿色结果不能代替当前 head。非目标平台若被要求为合并必需项，只报告配置与验收范围不一致，保留分支保护。
+
+### 本轮最小实机验收（未执行）
+
+1. 走航完成一次采样后，在轮次间隔快速连续点击停止走航、停止信号；确认两条结果各自到达，旧任务退出，直接重新准备和采样，无需再次停止走航。
+2. 制造普通采样失败，完成停止、分光启动、有效帧及基线准备，再启动新采样；当前提示属于新任务，旧失败原因仍保存在历史记录。
+3. 单独停止分光不显示全泵停止；未确认输出停止和主动急停仍保留原限制与核验条件。
 
 ## 停止恢复闭环验证边界（2026-10-20）
 
@@ -113,7 +150,7 @@ Updated: 2026-10-20
 | router 启动 | `usvon` 后 `usvstatus` | router pid 存在，TCP 5760 可用 |
 | MAVROS 连接 | `rostopic echo -n 1 /mavros/state` | `connected: True` |
 | QGC 手动命令 | QGC 发送 `COMMAND_LONG 31010` | `/usv/mavlink_cmd_rx` 收到，trigger 发布状态，ACK 返回 |
-| QGC 冷启动 | ROS 启动后立即点击启动信号 | bridge 不等待飞控心跳才开始接收；采样 owner 在 MAVROS 初始化等待期间仍每秒续约；配置回显和有效首帧后才成功 |
+| QGC 冷启动 | ROS 启动后立即点击启动信号 | bridge 不等待飞控心跳才开始接收；采样 owner 在 MAVROS 初始化等待期间仍每秒续约；31018 的关联 accepted 确认启动命令成功（配置回显 + ADS_OK:START），首帧与基线由遥测另行决定采样就绪 |
 | QGC 点采样进样 | Web 自动进样策略设不同于 `default_speed` 的速度，QGC 启动点采样 | 准备完成后按策略速度开启进样泵；准备时不提供暂停，主按钮可停止准备 |
 | QGC 普通停止 | 准备、采样、暂停阶段分别点击 `31011` | 取消当前流程并请求全部输出停止；关联终态/清理结果与实物停止分别确认，标准 ACK 不代替它们；不依赖紧急停止；Web 记录窗口按匹配结果关闭 |
 | 校准命令 | QGC 发送 `31014` | `/usv/pump_command` 出现 `CALXYZA` |
