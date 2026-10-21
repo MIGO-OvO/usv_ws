@@ -39,6 +39,14 @@ Updated: 2026-10-21
 2. 制造普通采样失败，完成停止、分光启动、有效帧及基线准备，再启动新采样；当前提示属于新任务，旧失败原因仍保存在历史记录。
 3. 单独停止分光不显示全泵停止；未确认输出停止和主动急停仍保留原限制与核验条件。
 
+### 相对零点与传输回归
+
+- ROS `test_calibration_lifecycle.py`、`test_preflight_web_contract.py`：不同轴非零偏移、跨0°、未校准、保存/重启显示一致、真实 PID_DONE、STOP/超时/断线、清理失败不能先发成功终态，以及同身份重传仅下发一次相对运动。
+- ROS `test_payload_event_bridge.py`：请求/回执丢失、RequestLedger 重放、trigger 单独重启、capability 到达顺序与旧实例拒绝。
+- QGC `SendMavCommandWithSignallingTest::_payloadReceiptOrderingAndButtons`：真实 Vehicle + FactGroup 分帧 + Button.enabled，覆盖 ACK/USVE1 两种顺序、旧 ACK/旧事件、同 command 连续请求、STOP、有限重传和原生超时释放。QML mock 测试只作控制器回归。
+- 构建以 Windows/Android 为限。USV 默认 `DISABLE_SPEECH=ON`；同时核对 OFF 语音路径、ON 无 TextToSpeech 导入及 Windows 部署依赖，其他 Multimedia 功能保留。`AudioOutputTest::_speechConfiguration` 验证禁用接口、隐藏设置与声音起航检查。
+- 台架仍须验证两端回到同一保存零点、R0/跨0°的真实完成、回零中 STOP 与断线看门狗、丢包重传物理动作一次，以及校准单独回零/自动化补偿分隔各自范围。离线通过不替代 Jetson、Android 或设备验收。
+
 ## 停止恢复闭环验证边界（2026-10-20）
 
 本轮保留既有内存关联、去重、尽力 JSONL 与 STOP 通道，围绕 F1–F6 补齐行为回归。测试使用生产控制器/模块，替换 ROS、串口或 RPC 边界；并发交错使用 Event/barrier。它们不代表设备已经完成现场验收。

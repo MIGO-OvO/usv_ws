@@ -30,7 +30,7 @@ Updated: 2026-10-21
 ## 三端逻辑映射
 
 - QGC Plan 航线定点采样使用 `MAV_CMD_NAV_SCRIPT_TIME(param1=1)`；手动载荷控制发送 `COMMAND_LONG 31010..31019`。
-- ROS `usv_mavlink_router_bridge.py` 从 router TCP 收命令，发布 `/usv/mavlink_cmd_rx`。
+- ROS `usv_mavlink_router_bridge.py` 从 router TCP 收命令；关联载荷请求发布带执行实例的 `/usv/payload_command`，飞控内部事件和无关联兼容 STOP 走 `/usv/mavlink_cmd_rx`。
 - ROS `mavlink_trigger_node.py` 解释命令，控制采样/校准/走航/分光。
 - ROS `usv_mavlink_router_bridge.py` 以 `NAMED_VALUE_FLOAT` 发送 26 个载荷字段，其中 5 个为系统健康字段；新增能力与采集状态为 `USV_PROTO/USV_ADS`。
 - ArduRover `GCS_MAVLink_Rover.cpp` 缓存字段，`sensors.cpp` 以 2 Hz 转发到 GCS。
