@@ -147,6 +147,21 @@ cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 
 ## 日志
 
+Jetson 更新 ROS 仓库后运行 `bash ~/usv_ws/src/usv_ros/scripts/install_usv_commands.sh install`，安装 `usvlogs` 快捷命令：
+
+```bash
+usvlogs pack field-1022       # 最近 3 个 ROS 会话与启动日志
+usvlogs usage                # 启动日志、ROS 日志、日志包占用
+usvlogs clean                # 预览
+usvlogs clean --apply        # 轮转并删除过期会话/日志包，不可恢复
+usvlogs auto on              # 每 10 分钟自动清理；auto off 关闭
+usvlogs auto status
+```
+
+自动清理需要 `logrotate`、`cron`，以运行 USV 的普通用户启用，并确认 `systemctl is-active cron` 返回 active。默认保留 3 个会话/日志包，ROS 会话预算 512 MiB，日志包预算 256 MiB；保留活跃会话和最近一小时日志，超出预算时输出警告。启动日志和 ROS 文本日志按 10 MiB、5 份轮转。检查间隔与活动文件保护意味着预算不是硬磁盘上限。工具不清理采样数据、pcap 或系统 journal。
+
+日志包输出到 `~/usv_ws/.usv_run/bundles/`，单文件末尾最多 2 MiB、总计最多 64 MiB，截取情况见包内 `manifest.json`。Windows 同步根仓库和 ROS 仓库后，双击根目录 `download_jetson_logs.bat`，输入 IP 与包名，下载到本机 `.usv_run/downloads/`；默认 SSH 用户为 jetson，认证由 OpenSSH 处理。完整参数与保留规则见 `src/usv_ros/README.md` 的“日志管理与下载”。
+
 | 位置 | 内容 |
 |---|---|
 | `.usv_run/logs/mavlink_router.log` | router 输出 |
