@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-21
+Updated: 2026-10-23
 
 ## ROS Launch
 
@@ -21,7 +21,8 @@ Updated: 2026-10-21
 
 | 名称 | 类型 | 方向 | 说明 |
 |---|---|---|---|
-| `/usv/payload_command` | `String(JSON)` | bridge -> trigger | `{executor, values:[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp,request,session,tcp_session]}`，固定首次转发的执行实例 |
+| `/usv/payload_command` | `String(JSON)` | bridge -> trigger | `{executor, values:[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp,request,session,tcp_session]}`，固定首次转发的执行实例；`recover_only:true` 只查询已知结果 |
+| `/usv/payload_protocol` | `String(JSON)` | trigger -> bridge | `{version,executor,tcp_session,source_monotonic}`；回显已处理的 TCP 会话，供 bridge 安排结果恢复 |
 | `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | 旧 7 元飞控内部事件、无关联兼容 STOP；关联请求须经执行实例封装 |
 | `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | `[cmd,result,target_sys,target_comp,tcp_session]`，过滤旧 TCP 会话；兼容旧 4 元 ACK |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
@@ -218,7 +219,13 @@ bridge 诊断 JSON 增加只读字段 `bad_data`（按 `bad_crc`/`unknown_messag
 
 ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（最多 750 字节），携带 v、session、request、seq、command、sender_system/component、tcp_session、phase、outcome、reason、完整 attempt_id 和 preflight_phase，可附 cleanup_failed。飞控原样转发 id/chunk_seq/source；QGC 仅使用完整重组消息，1 秒绝对组包期限，缺片/冲突不产生机器事件。标准 ACK 不携带 request 身份；任务成功必须是关联终态。comp191 关联请求以 1 秒间隔最多发送三份原身份/参数帧；普通总预算 5 秒、STOP 15 秒、31018 40 秒，末次发送保留剩余等待预算。仅载荷链路使用此策略；受理结束重传，物理任务继续由进度和终态更新。
 
-普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；32 请求/30 秒缓存不变。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
+普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；缓存最多 32 请求，已发历史保留 30 秒，未发送转换保留至发送或容量淘汰。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
+
+TCP 每轮发送共用 30 ms 预算，从接收处理结束后开始。当前帧尚无字节写入时，预算耗尽或暂时背压只延期，ACK/结果/分片在完整写入后出队。部分帧无法完成、零写入、EOF 或实际 socket 错误仍退役会话并触发停止。USVE1 跨轮续发保留 chunk id 和偏移；超过 QGC 既有 1 秒组包期限时从 chunk 0 用新 id 重播，续发期间普通文本日志等待。
+
+会话退役的取消首因是 `transport_session_lost`，贯通关联终态与采样结果。bridge 在新会话得到 trigger capability 回显后，只对原先保存的请求发送 `recover_only` 查询；执行器、sender/session/request、command 与参数全部匹配后，RequestLedger 才绑定新回执会话。缓存终态立即重放；尚在清理的请求随后在已验证的新会话发布终态。同身份网络重试使用相同校验。查询未知身份或参数冲突不执行动作，旧执行器身份仍拒绝；旧会话事件继续过滤，恢复不推进执行 generation，不重做 START。
+
+定位入口：bridge `Payload command rx/route` 记录请求身份、目标、MAVLink seq、confirmation、TCP 会话和执行实例；`USVE1 tx` 记录事件序号、chunk id/seq 和发送偏移。`/usv/bridge_diagnostics` 含 received_bytes、deferred_frames、短写/背压、最近写入偏移、待发数量、命令分支计数和 BAD_DATA 的分类/有限原始字节前缀。BAD_DATA 头部提示未经校验，只用于诊断。QGC `Vehicle.Vehicle` 记录命令发送，`MAVLink.StatusTextHandler` 记录每片与组包结算，不调整路由策略或组包期限。
 
 trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `TEMPORARILY_REJECTED` 标准 ACK 外，还会立刻产生与请求身份关联的 `phase=request, outcome=rejected, reason=command_lane_busy`，直接走已有发布路径，不再需要单独的持久化拒绝线程，因此不会出现“无人负责、无结果、重试又被静默吞掉”的 reservation。STOP 不被普通通道占用阻挡，在有界安全通道中串行执行；安全队列满时明确拒绝，且不推进 cancellation generation。同身份重传重放既有结果，各个已受理请求保留自己的结果；STOP 的执行、回执与通道释放都不等待日志落盘。后端拒绝时 `request/failed` 的 `reason` 保留控制服务的具体消息（例如 `spectrometer_not_ready: ...`），不再统一压成 `command_rejected_or_cancelled`。
 

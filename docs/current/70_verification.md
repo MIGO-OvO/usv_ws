@@ -2,6 +2,41 @@
 
 Updated: 2026-10-23
 
+## 采样请求 TCP 与结果恢复
+
+| 验收场景 | 离线入口与断言 |
+|---|---|
+| 健康连接发送前延迟超过 30 ms | ROS `test_mavlink_tcp_transport.py`、`test_payload_transport_recovery.py`：连接保留、generation 不变、任务不停止；ACK/USV_DONE/文本/事件稍后完整发出 |
+| 部分写入与背压 | 相同测试：offset=0 预算/背压延期；offset>0 截止或 EPIPE 退役、停止；记录真实写入偏移，不把未完成帧计入成功 |
+| USVE1 续发 | `test_bridge_qml_event_chain.py` 单独运行于真实 pymavlink：短写、EAGAIN、首帧前及分片中途预算耗尽，所有片段最终解析完整；超过 1 秒组包期从新 id 的 chunk 0 重播 |
+| 同身份恢复 | `test_payload_transport_recovery.py`：原终态、清理中重连、连续连接失败后恢复、同身份重试；seq/attempt/原因保持，START 一次；未知/冲突身份与旧执行实例不执行 |
+| 泵节点完整调用链 | `test_qgc_payload_startup.py::test_tcp_loss_stops_real_preflight_and_recovery_never_restarts_pumps`：生产 trigger/pump/准备状态机，替换串口与 ROS 边界；准备中 TCP 退役发送 STOPALL，停止后查询/重试不再发泵命令，原因为 transport_session_lost |
+| 旧结果与新任务 | ROS 新回归连续 8 轮开始/停止后再启动，重复、迟到、旧 TCP 事件不改新请求；QGC `test_transportCancellationRecoveryKeepsReasonAndNewTaskIsolated` 验证中文取消反馈、迟到结果隔离与停止未确认时保留锁 |
+
+真实 socket、pymavlink、Qt 控制器与模拟串口调用链均为主机离线验证，不代表 Jetson、飞控、串口设备或实船通过。
+
+### 执行记录
+
+| 类型 | 结果与入口 |
+|---|---|
+| ROS 非地图回归 | `python -B tests/run_non_map_tests.py`：746 项，730 通过、16 跳过；排除地图相关 130 项。真实 pymavlink/TCP 独立运行；Linux/Bash 等环境跳过不计通过 |
+| Linux/WSL 定向回归 | 独立 Python 进程运行 transport 7、真实 TCP 2、bridge 字节流 1、恢复 8，共 18 通过，0 跳过 |
+| QGC Qt 控制器/布局 | Qt 6.10.1 `qmltestrunner -input custom/tests`，offscreen/software：88 通过、0 失败/跳过；Vehicle 为测试夹具 |
+| QGC 契约 | `python -B -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`：37 通过 |
+| 根文档/源码契约 | `python docs/tools/check_workspace_compatibility.py`：Source contracts match；`python -B -m unittest discover -s docs/tools`：11 通过 |
+| Windows 本地 | 完整增量构建首次遇 C1060 编译器内存不足；降低并行度后转为两个修改的 C++ 对象及其依赖，编译状态另按实际完成结果报告。尚未生成本轮完整 Windows 应用或运行新二进制原生集成测试 |
+| Windows/Android CI | QGC `2d3e0bf7657e13a9eea841c8675a2c32e4b1ce10` 的 [Windows](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39850321936)、[Android](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39850322366) 发布时运行中；未额外重跑同一 head，未完成不计通过 |
+
+### 最小实机检查
+
+1. 停止当前任务后一起更新 ROS bridge/trigger，重启载荷节点；运行包含新反馈与诊断的 QGC。飞控、检测板本轮不需刷写。
+2. 保留同一时间窗 QGC `.tlog`/调试日志、Jetson `usv_system.log`/`mavlink_router.log`、`/usv/payload_event`、`/usv/sampling_result` 和 `/usv/bridge_diagnostics`。QGC 开启 `Vehicle.Vehicle` 与 `MAVLink.StatusTextHandler` 调试分类，记录 request/session/command、MAVLink seq、chunk id/seq。
+3. Jetson 用 `sudo tcpdump -i lo -s 0 -U -w /tmp/usv-sampling-check.pcap 'tcp port 5760 or udp port 14550 or udp port 14551'` 抓取 router/bridge 链路；用新的输出路径保留每次现场证据。在停止状态导出飞控串口/路由参数和实际 router 命令行、版本，不修改 NO_FORWARD 等选项。
+4. 正常链路连续开始/停止 10 轮，核对每个请求的受理/终态、每个 attempt 的实际动作次数和 STOPALL_OK。准备中断开 router TCP 后恢复，确认原请求取消并返回 `transport_session_lost`，同身份重试不能重新驱动泵。受控延迟/背压试验与真实断线分开执行。
+5. 命令在 TCP 抓包中有合法完整帧而无 `Payload command rx` 时，对照 BAD_DATA 前缀、CRC/未知消息、解析器版本和原始字节；TCP 抓包中缺失时，继续取得飞控输入/输出或 router 串口入口镜像以区分上游路由。USVE1 对照 bridge 每片完整写入、TCP 出站片段、QGC tlog 和组包日志，确定尾片在哪一段消失。
+
+本地 `2026-10-23 03-31-19.tlog` 包含 request 3/5/7、session 9 的三份 START（confirmation 0/1/2，目标 1/191）；71 组可识别 USVE1 中 10 组未见尾片，没有匹配 START 的完整结果。该 tlog 只证明 QGC 侧发送与接收事实，缺少同期上游入口和 Jetson 原始抓包，无法判定命令或尾片丢失在哪一跳。无线质量、NO_FORWARD 和 QGC 组包窗口均未作为已确认根因。
+
 ## 重叠停止与历史反馈（2026-10-21）
 
 本轮只改 QGC 请求归属和反馈筛选，以及相关测试、文档；不修改 ROS、Vehicle C++、飞控或固件。下方 2026-10-20 数量属于此前记录，不代表本轮 head 的验证。

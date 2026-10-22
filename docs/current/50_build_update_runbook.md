@@ -22,6 +22,12 @@ bootstrap_workspace.bat
 
 ## ROS / Jetson Nano
 
+### 采样响应超时修复更新范围
+
+更新 `MIGO-OvO/usv_ros`，同时重启 bridge、trigger 与 pump；bridge/trigger 的 `recover_only` 查询和 capability TCP 会话回显须来自同一版本。QGC 更新 `MIGO-OvO/WQ-USV-QGroundControl` 并重新构建，获得通信取消反馈和命令/分片诊断。根仓库仅更新接口、部署和验收说明。`ardupilot-usv` 与 `DetFirmware` 本轮无源码或线上协议变更。
+
+按现有停止后更新流程检出修复分支或其合并后的主分支，记录实际 SHA，重启后核对 `/usv/payload_protocol` 的 executor/tcp_session 与 `/usv/bridge_diagnostics`。正常开始/停止、断线恢复和同身份重试步骤见 `70_verification.md` 的“采样请求 TCP 与结果恢复”。
+
 首次依赖：
 
 ```bash
