@@ -24,7 +24,7 @@ Updated: 2026-10-23
 | QGC Qt 控制器/布局 | Qt 6.10.1 `qmltestrunner -input custom/tests`，offscreen/software：88 通过、0 失败/跳过；Vehicle 为测试夹具 |
 | QGC 契约 | `python -B -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`：37 通过 |
 | 根文档/源码契约 | `python docs/tools/check_workspace_compatibility.py`：Source contracts match；`python -B -m unittest discover -s docs/tools`：11 通过 |
-| Windows 本地 | 完整增量构建首次遇 C1060 编译器内存不足；降低并行度后转为两个修改的 C++ 对象及其依赖，编译状态另按实际完成结果报告。尚未生成本轮完整 Windows 应用或运行新二进制原生集成测试 |
+| Windows 本地 | Qt 6.10.1/MSVC 14.44，以并行度 2 编译修改的 `Vehicle.cc`、`StatusTextHandler.cc` 对象及依赖通过（exit 0）。完整增量构建首次遇 C1060 编译器内存不足；本轮完整 Windows 应用尚未链接，未运行新二进制原生集成测试 |
 | Windows/Android CI | QGC `2d3e0bf7657e13a9eea841c8675a2c32e4b1ce10` 的 [Windows](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39850321936)、[Android](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39850322366) 发布时运行中；未额外重跑同一 head，未完成不计通过 |
 
 ### 最小实机检查
