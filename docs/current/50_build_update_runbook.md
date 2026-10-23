@@ -1,6 +1,6 @@
 # 构建、更新、运行 Runbook
 
-Updated: 2026-10-19
+Updated: 2026-10-23
 
 ## 根仓库
 
@@ -147,7 +147,7 @@ cp build/Pixhawk6C/bin/ardurover.apj /mnt/d/usv_ws/ardurover.apj
 
 ## 日志
 
-Jetson 更新 ROS 仓库后运行 `bash ~/usv_ws/src/usv_ros/scripts/install_usv_commands.sh install`，安装 `usvlogs` 快捷命令：
+Jetson 更新 ROS 仓库后运行 `bash ~/usv_ws/src/usv_ros/scripts/install_usv_commands.sh install`，安装 `usvlogs` 快捷命令。旧独立命令及其他符号链接会先备份到目标目录的 `.usv-commands-backup.XXXXXX/`，安装过程逐项打印路径；不会覆盖备份。目录冲突须手动处理。
 
 ```bash
 usvlogs pack field-1022       # 最近 3 个 ROS 会话与启动日志
@@ -158,7 +158,7 @@ usvlogs auto on              # 每 10 分钟自动清理；auto off 关闭
 usvlogs auto status
 ```
 
-自动清理需要 `logrotate`、`cron`，以运行 USV 的普通用户启用，并确认 `systemctl is-active cron` 返回 active。默认保留 3 个会话/日志包，ROS 会话预算 512 MiB，日志包预算 256 MiB；保留活跃会话和最近一小时日志，超出预算时输出警告。启动日志和 ROS 文本日志按 10 MiB、5 份轮转。检查间隔与活动文件保护意味着预算不是硬磁盘上限。工具不清理采样数据、pcap 或系统 journal。
+自动清理需要 `logrotate`、`cron`，以运行 USV 的普通用户启用，并确认 `systemctl is-active cron` 返回 active。自动清理默认关闭，须显式执行 `usvlogs auto on`。ROS UUID 会话、ROS 根目录日志及日志包每类至少保留最近 3 份；数量、活动会话、进程占用及最近一小时日志的保护优先。ROS 会话与根目录日志共用 512 MiB 预算，日志包预算 256 MiB；保留后仍超预算则输出目录、占用和预算告警，不删除最近份数。`clean --keep 5 --max-mib 1024` 可调整手动清理的保留数量与 ROS 预算。启动日志和 ROS 文本日志按 10 MiB、5 份轮转。检查间隔与活动文件保护意味着预算不是硬磁盘上限。工具不清理采样数据、pcap 或系统 journal。
 
 日志包输出到 `~/usv_ws/.usv_run/bundles/`，单文件末尾最多 2 MiB、总计最多 64 MiB，截取情况见包内 `manifest.json`。Windows 同步根仓库和 ROS 仓库后，双击根目录 `download_jetson_logs.bat`，输入 IP 与包名，下载到本机 `.usv_run/downloads/`；默认 SSH 用户为 jetson，认证由 OpenSSH 处理。完整参数与保留规则见 `src/usv_ros/README.md` 的“日志管理与下载”。
 
@@ -173,7 +173,7 @@ usvlogs auto status
 
 2026-10 跨端版本需成套部署：先停任务并确认执行器安全，备份配置/旧产物/故障证据，再更新 ROS（含 static/dist）、DetFirmware、ArduRover 和 QGC，最后重启并只读核验。ROS 保留请求 SQLite 与 transport 会话文件，QGC 保留 `payload-request-identity.ini`；不要通过删除账本重置编号。旧 QGC 窗口必须退出后再启动新产物，本次 Agent 未替换运行中的窗口，也未烧录设备。
 
-先验证 STOP 与确认状态，再低负载验证准备/采样/失败恢复；检测板仍有独立 30 秒 PID 限时。出现旧动作重放、假成功、停止未确认或持续失联，立即停机并保留日志，回退匹配组合；不能回退到含已知安全缺陷的版本后继续自动采样。`rotate_runtime_logs.py` 默认 dry-run，仅显式 `--rotate` 时采用 10 MiB × 5 的 copytruncate；有微小丢行窗口，不自动处理现场证据。
+先验证 STOP 与确认状态，再低负载验证准备/采样/失败恢复。油相分隔使用相对角度 R/PID，读取设备实际 PID 速度上下限，按扣除报告舍入误差的最低速度最多 20 秒行程且不超过 360° 分段，每段均需真实 PID_DONE 和角度行程确认；旧 separation_rpm 只保留配置兼容。检测板仍有独立 30 秒 PID 限时，现有固件无需为此更新。出现旧动作重放、假成功、停止未确认或持续失联，立即停机并保留日志，回退匹配组合；不能回退到含已知安全缺陷的版本后继续自动采样。`rotate_runtime_logs.py` 默认 dry-run，仅显式 `--rotate` 时采用 10 MiB × 5 的 copytruncate；有微小丢行窗口，不自动处理现场证据。
 
 ```bash
 usvstatus

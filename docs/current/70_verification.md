@@ -1,6 +1,6 @@
 # 验证矩阵
 
-Updated: 2026-10-21
+Updated: 2026-10-23
 
 ## 重叠停止与历史反馈（2026-10-21）
 
@@ -46,6 +46,12 @@ Updated: 2026-10-21
 - QGC `SendMavCommandWithSignallingTest::_payloadReceiptOrderingAndButtons`：真实 Vehicle + FactGroup 分帧 + Button.enabled，覆盖 ACK/USVE1 两种顺序、旧 ACK/旧事件、同 command 连续请求、STOP、有限重传和原生超时释放。QML mock 测试只作控制器回归。
 - 构建以 Windows/Android 为限。USV 默认 `DISABLE_SPEECH=ON`；同时核对 OFF 语音路径、ON 无 TextToSpeech 导入及 Windows 部署依赖，其他 Multimedia 功能保留。`AudioOutputTest::_speechConfiguration` 验证禁用接口、隐藏设置与声音起航检查。
 - 台架仍须验证两端回到同一保存零点、R0/跨0°的真实完成、回零中 STOP 与断线看门狗、丢包重传物理动作一次，以及校准单独回零/自动化补偿分隔各自范围。离线通过不替代 Jetson、Android 或设备验收。
+
+## PID 油相分隔与日志管理验证
+
+- ROS `test_automation_preflight.py`、`test_preflight_review_regressions.py`、`test_preflight_stop_races.py`、`test_sampling_timeout_budget.py`：多圈 PID 分段、最低速度与 30 秒限时、每段真实 PID_DONE、角度不足/跳变/断流/停滞、STOP 抢占、任务归属及失败锁存。分隔不发送 J；回零、360° 补偿、进样与正式序列沿用原流程。
+- ROS `test_usv_cli_scripts.py`、`test_usv_logs.py`：旧命令文件与符号链接备份迁移、重复安装及卸载、预览不删除、最近数量优先于容量、活动/一小时保护、预算告警和自动清理显式启用。Linux `/proc`、Bash 与临时目录用于执行日志回归。
+- Jetson/ESP32 台架：验证实际 PID 参数下油相泵带负载起转、跨零点十圈与分段衔接；逐段确认 PID_DONE 与角度行程。分隔中 STOP、断开角度反馈及串口，核对真实输出停止、故障锁存与新任务归属。核验现有命令备份后再清理预览，重要现场日志先打包下载。离线回归不代替设备验收。
 
 ## 停止恢复闭环验证边界（2026-10-20）
 
