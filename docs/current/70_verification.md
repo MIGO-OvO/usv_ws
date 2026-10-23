@@ -9,6 +9,8 @@ Updated: 2026-10-23
 | 健康连接发送前延迟超过 30 ms | ROS `test_mavlink_tcp_transport.py`、`test_payload_transport_recovery.py`：连接保留、generation 不变、任务不停止；ACK/USV_DONE/文本/事件稍后完整发出 |
 | 部分写入与背压 | 相同测试：offset=0 预算/背压延期；offset>0 截止或 EPIPE 退役、停止；记录真实写入偏移，不把未完成帧计入成功 |
 | USVE1 续发 | `test_bridge_qml_event_chain.py` 单独运行于真实 pymavlink：短写、EAGAIN、首帧前及分片中途预算耗尽，所有片段最终解析完整；超过 1 秒组包期从新 id 的 chunk 0 重播 |
+| STOP 优先级 | `test_payload_transport_recovery.py`：旧普通长事件持续背压、反复过期时，STOP 在有限周期内完整发送；未过期事件也在完整帧边界让出。真实 pymavlink 测试在旧帧短写时入队 STOP，断言先补齐该帧，再发 STOP，旧事件以新 id 完整重播，无 BAD_DATA |
+| 启动上下文竞态 | `test_payload_transport_recovery.py`：用线程事件分别阻塞手动/FCU 位置绑定，在窗口内断开 TCP；STOP 触发，采样状态不复活，恢复和同身份重试保留 `transport_session_lost`、seq、attempt，服务只收到一次 stop，未收到 START |
 | 同身份恢复 | `test_payload_transport_recovery.py`：原终态、清理中重连、连续连接失败后恢复、同身份重试；seq/attempt/原因保持，START 一次；未知/冲突身份与旧执行实例不执行 |
 | 泵节点完整调用链 | `test_qgc_payload_startup.py::test_tcp_loss_stops_real_preflight_and_recovery_never_restarts_pumps`：生产 trigger/pump/准备状态机，替换串口与 ROS 边界；准备中 TCP 退役发送 STOPALL，停止后查询/重试不再发泵命令，原因为 transport_session_lost |
 | 旧结果与新任务 | ROS 新回归连续 8 轮开始/停止后再启动，重复、迟到、旧 TCP 事件不改新请求；QGC `test_transportCancellationRecoveryKeepsReasonAndNewTaskIsolated` 验证中文取消反馈、迟到结果隔离与停止未确认时保留锁 |
@@ -19,13 +21,16 @@ Updated: 2026-10-23
 
 | 类型 | 结果与入口 |
 |---|---|
-| ROS 非地图回归 | `python -B tests/run_non_map_tests.py`：746 项，730 通过、16 跳过；排除地图相关 130 项。真实 pymavlink/TCP 独立运行；Linux/Bash 等环境跳过不计通过 |
-| Linux/WSL 定向回归 | 独立 Python 进程运行 transport 7、真实 TCP 2、bridge 字节流 1、恢复 8，共 18 通过，0 跳过 |
+| ROS 非地图回归 | `python -B tests/run_non_map_tests.py`：751 项，735 通过、16 跳过；排除地图相关 130 项。真实 pymavlink/TCP 独立运行；Linux/Bash 等环境跳过不计通过 |
+| Linux/WSL 定向回归 | 独立 Python 进程运行 transport 7、真实 TCP 2、bridge 字节流 2、恢复 12，共 23 通过，0 跳过 |
 | QGC Qt 控制器/布局 | Qt 6.10.1 `qmltestrunner -input custom/tests`，offscreen/software：88 通过、0 失败/跳过；Vehicle 为测试夹具 |
 | QGC 契约 | `python -B -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`：37 通过 |
 | 根文档/源码契约 | `python docs/tools/check_workspace_compatibility.py`：Source contracts match；`python -B -m unittest discover -s docs/tools`：11 通过 |
-| Windows 本地 | Qt 6.10.1/MSVC 14.44，以并行度 2 编译修改的 `Vehicle.cc`、`StatusTextHandler.cc` 对象及依赖通过（exit 0）。完整增量构建首次遇 C1060 编译器内存不足；本轮完整 Windows 应用尚未链接，未运行新二进制原生集成测试 |
-| Windows/Android CI | QGC `2d3e0bf7657e13a9eea841c8675a2c32e4b1ce10` 的 [Windows](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39850321936)、[Android](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39850322366) 发布时运行中；未额外重跑同一 head，未完成不计通过 |
+| Windows 本地 | Qt 6.10.1/MSVC 14.44.35207，Debug、`DISABLE_SPEECH=ON`，并行度 2：完整应用编译、链接和构建后 windeployqt 部署通过（exit 0） |
+| QGC 原生 C++ | 新构建应用依次运行 VehicleLinkManager 8、SendMavCommandWithSignalling 13、StatusTextHandler 7 项：28 通过、0 失败/跳过，含 MockLink 断开同步及载荷回执/QML 集成 |
+| ROS → QGC 原生跨端 | ROS bridge 以真实 pymavlink 生成 sysid 147/191 的合法分片，原样送入上述原生测试：28 通过；日志确认使用外部 fixture，未改写帧身份 |
+| Windows 安装包 | 新 staging 的 `cmake --install`、windeployqt 与 NSIS 3.11 打包 exit 0；没有 TextToSpeech DLL/插件，部署程序启动检查 exit 0；7-Zip 校验包内 2528 文件通过。仅验证 x64 Debug，未执行系统安装/卸载 |
+| 当前 head CI | 只按对应提交的实际状态计入；旧 Windows 参数错误、MockLink 竞态、AppImage 截图 404、pre-commit 与环境下载故障的日志分类及最新状态见 [审计交付记录](../reports/2026-10-23-sampling-response-audit.md) |
 
 ### 最小实机检查
 

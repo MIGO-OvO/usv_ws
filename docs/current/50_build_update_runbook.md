@@ -24,7 +24,7 @@ bootstrap_workspace.bat
 
 ### 采样响应超时修复更新范围
 
-更新 `MIGO-OvO/usv_ros`，同时重启 bridge、trigger 与 pump；bridge/trigger 的 `recover_only` 查询和 capability TCP 会话回显须来自同一版本。QGC 更新 `MIGO-OvO/WQ-USV-QGroundControl` 并重新构建，获得通信取消反馈和命令/分片诊断。根仓库仅更新接口、部署和验收说明。`ardupilot-usv` 与 `DetFirmware` 本轮无源码或线上协议变更。
+更新 `MIGO-OvO/usv_ros`，同时重启 bridge、trigger 与 pump；bridge/trigger 的 `recover_only` 查询和 capability TCP 会话回显须来自同一版本。本轮补齐完整帧边界的 STOP 优先调度，以及启动上下文发布时的请求绑定。QGC 更新 `MIGO-OvO/WQ-USV-QGroundControl` 并重新构建，获得通信取消反馈、命令/分片诊断和 Windows 部署修复。根仓库仅更新接口、部署和验收说明。`ardupilot-usv` 与 `DetFirmware` 本轮无源码或线上协议变更。
 
 按现有停止后更新流程检出修复分支或其合并后的主分支，记录实际 SHA，重启后核对 `/usv/payload_protocol` 的 executor/tcp_session 与 `/usv/bridge_diagnostics`。正常开始/停止、断线恢复和同身份重试步骤见 `70_verification.md` 的“采样请求 TCP 与结果恢复”。
 
@@ -123,7 +123,9 @@ make configure
 make build
 ```
 
-如本机 Qt/QGC 环境不同，以 `WQ-USV-QGroundControl/README.md`、`Makefile`、`justfile` 为准。最终构建由用户本地验证。
+如本机 Qt/QGC 环境不同，以 `WQ-USV-QGroundControl/README.md`、`Makefile`、`justfile` 为准。Windows 复用构建目录时，Qt 路径、架构和 MSVC 版本须与 `CMakeCache.txt` 一致。
+
+`DISABLE_SPEECH=ON` 保留编译时禁用语音，并在构建后部署和安装部署两处使用 `windeployqt --skip-plugin-types texttospeech`。Qt 6.10.1 不支持 `--no-texttospeech`。部署工具不会清理旧目录中遗留的插件；验收此选项时使用新的 staging 目录，检查 `plugins/texttospeech` 与 TextToSpeech DLL，并执行 `cmake --install` 验证部署及 NSIS 安装包生成。具体构建、测试与 CI 结果见 [本轮审计交付记录](../reports/2026-10-23-sampling-response-audit.md)。
 
 ## ArduPilot / Pixhawk 6C
 

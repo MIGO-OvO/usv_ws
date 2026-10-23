@@ -221,9 +221,9 @@ ROS 以 source=本 sysid/191 发送 MAVLink2 STATUSTEXT `USVE1:` + ASCII JSON（
 
 普通 progress 的 `outcome` 为 `""`，`state` 可为 `running`。身份、attempt 和序号均合法的执行进度可证明已进入执行，不要求更早 accepted 必须送达；不能据此声称任务成功。bridge 保留每请求一个重要未发送转换及最新 progress，终态覆盖旧证据；缓存最多 32 请求，已发历史保留 30 秒，未发送转换保留至发送或容量淘汰。发送优先级为 STOP、新终态、其他新转换、历史重播；容量压力优先淘汰已发历史/普通待发，不能用历史重播拖延新请求首发。全安全回执超载仍受容量限制，请求端须保守处理未知状态。
 
-TCP 每轮发送共用 30 ms 预算，从接收处理结束后开始。当前帧尚无字节写入时，预算耗尽或暂时背压只延期，ACK/结果/分片在完整写入后出队。部分帧无法完成、零写入、EOF 或实际 socket 错误仍退役会话并触发停止。USVE1 跨轮续发保留 chunk id 和偏移；超过 QGC 既有 1 秒组包期限时从 chunk 0 用新 id 重播，续发期间普通文本日志等待。
+TCP 每轮发送共用 30 ms 预算，从接收处理结束后开始。当前帧尚无字节写入时，预算耗尽或暂时背压只延期，ACK/结果/分片在完整写入后出队。部分帧无法完成、零写入、EOF 或实际 socket 错误仍退役会话并触发停止。USVE1 跨轮续发保留 chunk id 和偏移；完整 MAVLink 帧之间若有更高优先级事件，或已超过 QGC 既有 1 秒组包期限，则重新调度。STOP 可先于旧普通长事件发送；被中断事件保留原请求身份、seq 和内容，下次从 chunk 0 用新 id 重播。已部分写入的帧必须先完成，否则退役会话，不能插入其他帧。续发期间普通文本日志等待。
 
-会话退役的取消首因是 `transport_session_lost`，贯通关联终态与采样结果。bridge 在新会话得到 trigger capability 回显后，只对原先保存的请求发送 `recover_only` 查询；执行器、sender/session/request、command 与参数全部匹配后，RequestLedger 才绑定新回执会话。缓存终态立即重放；尚在清理的请求随后在已验证的新会话发布终态。同身份网络重试使用相同校验。查询未知身份或参数冲突不执行动作，旧执行器身份仍拒绝；旧会话事件继续过滤，恢复不推进执行 generation，不重做 START。
+会话退役的取消首因是 `transport_session_lost`，贯通关联终态与采样结果。手动与 FCU 启动在创建采样上下文时就绑定关联请求，并在同一状态锁内发布上下文与采样状态；位置绑定期间发生断线也能归结到原请求，清理完成后启动线程不会恢复采样标志。bridge 在新会话得到 trigger capability 回显后，只对原先保存的请求发送 `recover_only` 查询；执行器、sender/session/request、command 与参数全部匹配后，RequestLedger 才绑定新回执会话。缓存终态立即重放；尚在清理的请求随后在已验证的新会话发布终态。同身份网络重试使用相同校验。查询未知身份或参数冲突不执行动作，旧执行器身份仍拒绝；旧会话事件继续过滤，恢复不推进执行 generation，不重做 START。
 
 定位入口：bridge `Payload command rx/route` 记录请求身份、目标、MAVLink seq、confirmation、TCP 会话和执行实例；`USVE1 tx` 记录事件序号、chunk id/seq 和发送偏移。`/usv/bridge_diagnostics` 含 received_bytes、deferred_frames、短写/背压、最近写入偏移、待发数量、命令分支计数和 BAD_DATA 的分类/有限原始字节前缀。BAD_DATA 头部提示未经校验，只用于诊断。QGC `Vehicle.Vehicle` 记录命令发送，`MAVLink.StatusTextHandler` 记录每片与组包结算，不调整路由策略或组包期限。
 
