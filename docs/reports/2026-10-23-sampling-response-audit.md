@@ -97,23 +97,31 @@ MockLink/MockLinkWorker 在 master、#20 和原 #21 的源码一致，属于既�
 
 ### 修复提交的检查
 
-以下为北京时间 2026-10-23 16:40 的快照，只记录 QGC `2a063f7379d54af618a309694628b577655299f3` 的检查，运行中不计通过。
+以下为北京时间 2026-10-23 18:02 的快照，只记录 QGC `2a063f7379d54af618a309694628b577655299f3` 的检查，运行中不计通过。
 
 | 检查 | 状态 / 链接 |
 |---|---|
 | PR Checks / Check Links | 通过 |
-| Windows | [运行中](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648677) |
-| Android | [PR run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648830) / [push run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923642303) 运行中 |
-| Linux / AppImage | [工作流运行中](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648961)：x64 Release 的 Checkout repo 已失败，构建与 AppImage 未执行，日志尚未开放；ARM64 Release 构建中，x64 Debug 安装依赖中 |
-| Docker | [运行中](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648571) |
+| Windows | [通过](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648677)：x64、ARM64、ARM64 cross 三项 Release 构建与安装包生成均成功 |
+| Android | [PR run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648830) / [push run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923642303) 的 Linux、emulator、macOS、Windows 均通过 |
+| Linux / AppImage | [工作流运行中](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648961)：ARM64 Release 构建及 AppImage 创建、验证通过；x64 Debug 正在构建。x64 Release 在 Checkout repo 阶段失败，check-run annotation 为 `The hosted runner lost communication with the server`，构建与 AppImage 未执行；该 job 日志接口仍返回 BlobNotFound |
+| Docker | [Linux / Android 均通过](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648571) |
 | pre-commit | [失败](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39923648815)；已取得完整日志 `precommit-after-full.log`，按文件/行号可定位的诊断没有落入本 PR 新增行，全仓检查尚未通过 |
 
 本机全套改动文件 pre-commit 在初始化 Vale 的 Go/tree-sitter 环境时失败（`build constraints exclude all Go files` / `undefined: Node`），未执行完整 hooks，记录为未完成。单独运行 merge-conflict、mixed-line-ending、added-large-files 三个 hook 通过；本 PR 新增 C++ 行另按 clang-format 21.1.7 检查。未修改工作流以绕过失败。
 
+## 合并前自审
+
+复核 ROS #97 相对 main 的完整改动、QGC #20 与 #21 的两层改动，以及文档 #29 与 #30；检查现有调用者、停止路径、分片边界、请求账本与 MockLink worker 生命周期。五个 PR 均无未解决的 review thread，自审未发现新的阻塞性代码问题。
+
+再次执行 ROS transport 7、真实 TCP 2、恢复 12、真实 bridge 字节流 2、事件优先级 7、启动/泵调用链 5，共 35 项，全部通过且无跳过。QML 88、QGC 契约 37、原生 C++/跨端 28、根文档 11 项再次通过；原生进程 exit 0，日志确认读取 ROS 外部帧 fixture。新增日志为 `self-audit-ros.log`、`self-audit-qml.txt`、`self-audit-native.txt`。
+
+已按审核时的 head SHA 正常合并 ROS #97（`0869afd38cf6d40fe333984d32d8c07b4316e416`）、QGC #20 → #21（`dc24c33e4cd981d7108790e3445124eb7f8ee3ff` → `5aa5e3c38809c685e168687c830af43dda40d271`）及文档依赖 #29（`800b299f3fe8fe47da881abce920939300f904ed`）。QGC #21 在 #20 合并后改 base 为 master，head 未改；master 合并后的文件树与已测试 head 一致。本文随原 #30 更新，#29 合并后改 base 为 main，再完成合并。
+
 ## 尚待验证
 
-- Windows Release、ARM64 和 ARM64 cross 的当前 head CI；本地主机为 x64 Debug。
-- Linux runner 的当前 head MockLink 全套回归及 AppImage；Windows 原生通过不能代替它们。
+- 干净 Windows 机器上的安装/卸载与 GPU/视频运行；本地安装包验证为 x64 Debug，Release 与 ARM 构建结果见上述 CI。
+- Linux x64 Debug 的当前 head MockLink 全套回归，以及因 runner 失联未执行的 x64 Release/AppImage；ARM64 AppImage 已通过。
 - pre-commit 全仓历史告警。未为本轮修复扩大到全仓格式化、重构或检查配置变更。
 - Jetson、飞控、检测装置台架和实船未部署验收；真实输出停止、无线链路、router 转发须按 `docs/current/70_verification.md` 留存同窗证据。
 
