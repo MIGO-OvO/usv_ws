@@ -330,6 +330,8 @@ safety1 成套更新要求：身份响应须包含 `CAP=WATCHDOG1`。上电禁�
 
 ROS/Windows 混合串口解析器均保留读取块末尾单独的 `0x55`，避免帧头跨读取边界时丢帧；联合黄金帧回归覆盖分片、坏校验与测试位。
 
+DetFirmware `2026.10.25-pid-phases1` 的单次 PID 总上限为 600 秒；首次进入剩余解环误差 10° 后，独立计时 180 秒收敛，两项期限先到者生效。每轴只进入收敛一次，往返纠偏和其他轴完成不重置期限。`PID_SETTLE:<轴>,err=...,elapsed_ms=...` 仅报告阶段变化，不能代替 `PID_DONE`。超时文本保留 `PID_TIMEOUT:<轴>,abs=...,err=...`，追加 `phase=total|settling,elapsed_ms=...,settle_ms=...`；ROS/Windows 仍按原轴字段识别失败，二进制帧布局不变。ROS 默认等待 610 秒。
+
 Windows 的 ADS STOP 事务只消费当前固件专属回复 `ADS_OK:STOP`、`ADS_ERR:STOP_I2C`、`ADS_ERR:STOP_MUTEX_TIMEOUT`；迟到 START/配置错误不得推进 STOP。Qt 已排队 reader 回调在交付时按不可变 reader 身份过滤；关闭等待或清 buffer 不替代会话隔离。
 
 | 项 | 当前值 |
