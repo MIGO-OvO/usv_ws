@@ -89,10 +89,10 @@ Updated: 2026-10-23
 
 ## PID 油相分隔与日志管理验证
 
-- ROS `test_automation_preflight.py`、`test_preflight_review_regressions.py`、`test_preflight_stop_races.py`、`test_sampling_timeout_budget.py`：多圈 PID 分段、610 秒主机等待、120 秒行程进展窗口、低速量化反馈、收敛回摆、每段真实 PID_DONE、角度不足/跳变/断流/停滞、STOP 抢占、任务归属及失败锁存。分隔不发送 J；回零、360° 补偿、进样与正式序列沿用原流程。
+- ROS `test_automation_preflight.py`、`test_preflight_review_regressions.py`、`test_preflight_stop_races.py`、`test_sampling_timeout_budget.py`：五圈一次 1800°、十圈一次 3600°、小数圈数一次执行、610 秒主机等待、120 秒行程进展窗口、低速量化反馈、收敛回摆、整次运动的真实 PID_DONE、角度不足/跳变/断流/停滞、STOP 抢占、任务归属及失败锁存。分隔不发送 J；回零、360° 补偿、进样与正式序列沿用原流程。
 - DetFirmware `test_pid_move_timeout_native.py`：提取生产 PID 控制循环，以模拟时间和传感器运行慢速多圈、10° 首次进入后的 180 秒收敛期限、600 秒总上限、各轴独立、小行程、时钟回绕、STOP 和无效反馈。与 `test_control_watchdog_native.py`、`test_pid_test_scheduling_native.py` 一起在 Linux/WSL 执行；PlatformIO 编译与宿主回归不替代上板验收。
 - ROS `test_usv_cli_scripts.py`、`test_usv_logs.py`：旧命令文件与符号链接备份迁移、重复安装及卸载、预览不删除、最近数量优先于容量、活动/一小时保护、预算告警和自动清理显式启用。Linux `/proc`、Bash 与临时目录用于执行日志回归。
-- Jetson/ESP32 台架：验证实际 PID 参数下油相泵带负载起转、跨零点十圈与分段衔接；逐段确认 PID_DONE 与角度行程。分隔中 STOP、断开角度反馈及串口，核对真实输出停止、故障锁存与新任务归属。核验现有命令备份后再清理预览，重要现场日志先打包下载。离线回归不代替设备验收。
+- Jetson/ESP32 台架：验证实际 PID 参数下油相泵带负载起转、单次跨零点五圈/十圈；确认整次运动的 PID_DONE 与角度解环累计行程。分隔中 STOP、断开角度反馈及串口，核对真实输出停止、故障锁存与新任务归属。核验现有命令备份后再清理预览，重要现场日志先打包下载。离线回归不代替设备验收。
 
 ## 停止恢复闭环验证边界（2026-10-20）
 

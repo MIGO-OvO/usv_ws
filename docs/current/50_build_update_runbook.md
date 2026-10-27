@@ -181,7 +181,7 @@ usvlogs auto status
 
 2026-10 跨端版本需成套部署：先停任务并确认执行器安全，备份配置/旧产物/故障证据，再更新 ROS（含 static/dist）、DetFirmware、ArduRover 和 QGC，最后重启并只读核验。ROS 保留请求 SQLite 与 transport 会话文件，QGC 保留 `payload-request-identity.ini`；不要通过删除账本重置编号。旧 QGC 窗口必须退出后再启动新产物，本次 Agent 未替换运行中的窗口，也未烧录设备。
 
-先验证 STOP 与确认状态，再低负载验证准备/采样/失败恢复。油相分隔使用相对角度 R/PID，读取设备实际 PID 速度上下限，按扣除报告舍入误差的最低速度最多 360 秒行程且不超过 360° 分段，每段均需真实 PID_DONE 和角度行程确认；旧 separation_rpm 只保留配置兼容。DetFirmware `2026.10.25-pid-phases1` 每轴单次 PID 最长 600 秒，首次进入剩余解环误差 10° 后另计 180 秒收敛，两项期限先到者生效。ROS 默认等待 610 秒，油相行程无进展窗口为 120 秒。部署须同时更新 ROS 与检测板，检查私有 `pid_wait_timeout` 未保留较短旧值；仅更新 ROS 不能解除旧固件 30 秒限时。出现旧动作重放、假成功、停止未确认或持续失联，立即停机并保留日志，回退匹配组合；不能回退到含已知安全缺陷的版本后继续自动采样。`rotate_runtime_logs.py` 默认 dry-run，仅显式 `--rotate` 时采用 10 MiB × 5 的 copytruncate；有微小丢行窗口，不自动处理现场证据。
+先验证 STOP 与确认状态，再低负载验证准备/采样/失败恢复。油相分隔使用相对角度 R/PID，读取设备实际 PID 速度上下限，将配置圈数乘以 360° 后一次执行完整行程，例如五圈只发送一次 1800° PID 命令；完成需真实 PID_DONE 和角度解环累计行程确认。圈数范围仍为 0～10，旧 separation_rpm 只保留配置兼容。DetFirmware `2026.10.25-pid-phases1` 每轴单次 PID 最长 600 秒，首次进入剩余解环误差 10° 后另计 180 秒收敛，两项期限先到者生效。ROS 默认等待 610 秒，油相行程无进展窗口为 120 秒。部署须同时更新 ROS 与检测板，检查私有 `pid_wait_timeout` 未保留较短旧值；仅更新 ROS 不能解除旧固件 30 秒限时。出现旧动作重放、假成功、停止未确认或持续失联，立即停机并保留日志，回退匹配组合；不能回退到含已知安全缺陷的版本后继续自动采样。`rotate_runtime_logs.py` 默认 dry-run，仅显式 `--rotate` 时采用 10 MiB × 5 的 copytruncate；有微小丢行窗口，不自动处理现场证据。
 
 ```bash
 usvstatus
