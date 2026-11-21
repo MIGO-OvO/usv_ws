@@ -4,7 +4,7 @@ Updated: 2026-10-19
 
 ## 范围与调用链
 
-现场入口：QGC 手动 31010、FCU `USV_SMPL`、可选 waypoint 自动触发、走航调度、lab_real、Web `/api/mission/start`。
+现场入口包括 QGC 手动 31010、FCU 的 31021 航点采样、走航调度、lab_real 和 Web `/api/mission/start`。
 一轮自动化事务（包含其配置的步骤/loop）为一次采样；原始分光帧和模拟液滴是该记录的子数据，不分别创建 SampleRecord。
 
 现有闭环保持：QGC → 飞控命令/mission script → bridge → trigger → pump；
@@ -48,7 +48,7 @@ Web 直接启动的记录通过现有 samples API 读取；它不经过 trigger 
 - 纬经度必须有限且在合法范围，NavSatFix status >= 0；不合格只拒绝坐标快照，不拒绝采样。
 - 新鲜度使用 Jetson 本地 monotonic 接收年龄。FCU/MAVROS `header.stamp` 属于另一时钟域，只作诊断，不用跨时钟偏差拒绝新鲜 fix。持续重放旧定位的源端问题仍需现场核验。
 - 无效定位消息替换旧缓存，防止失锁后沿用旧有效点。默认正好 2 秒可绑定，超过 2 秒记空坐标。
-- waypoint 在 HOLD/稳定等待之后冻结；manual/FCU 在进样前冻结；每轮 survey 单独冻结/生成 UUID；lab_real 永远使用硬件 GPS，不使用虚拟航点位置。
+- waypoint 在 LOITER 稳定等待后冻结，manual 和 FCU 在进样前冻结。每轮 survey 单独冻结并生成 UUID，lab_real 使用硬件 GPS。
 - lab_sim 使用显式模拟坐标，不要求硬件 GPS；模拟走航优先使用 lab status 船位，兼容原有可用位置输入。仿真记录明确标 simulated，不能冒充现场点。
 - 采样期间船位移动或 GPS 失锁，不改已冻结的位置；下一次采样重新检验。FCU 是否成功放行仍由匹配 ID 的真实任务结果或显式 SKIP 决定，不能由 GPS 有无或清理结束推断。
 - bench 调试的低层电机、进样、分光连续流及直接 ROS pump 控制服务不是地理采样 API，本次不禁止这些调试接口；正式现场采样须走上述入口。ROS 控制网仍需访问隔离。
@@ -57,7 +57,7 @@ Web 直接启动的记录通过现有 samples API 读取；它不经过 trigger 
 
 源码依据：
 
-- `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` 的 NAMED_VALUE_FLOAT 分支只缓存既有载荷字段，并处理 `USV_DONE/USV_FAIL`。
+- `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` 缓存既有载荷字段，并把 31021 交给 `Rover/usv_sampling.cpp`。
 - `ardupilot-usv/Rover/sensors.cpp::usv_telemetry_send` 按 2 Hz 重发缓存，不携带某个采样点的原子 ID/坐标。
 - `ardupilot-usv/libraries/GCS_MAVLink/MAVLink_routing.cpp::check_and_forward` 阻止 NAMED_VALUE_FLOAT 直接转发；未知消息的 CRC/路由也不能视为天然可透传。
 - `WQ-USV-QGroundControl/custom/src/USVPayloadFactGroup.cc::handleMessage` 处理旧遥测，无 WQ_SAMPLE_POINT 解码。
@@ -80,7 +80,7 @@ Web 直接启动的记录通过现有 samples API 读取；它不经过 trigger 
 固定 payload 69 字节。最小消息只传点、关联 ID、质量位和基础测量；完整 mission_id、污染物种类/单位、浓度/原始数据继续由 ROS API 按 UUID 查询，避免飞控承载业务数据库。
 
 后续投产要求：同一 XML 生成 pymavlink、ArduPilot、QGC 三份定义；bridge 单 socket writer 发送，飞控显式白名单转发；QGC 以 sysid+UUID 去重并关联点位。端到端 CRC、MAVLink2 链路、低带宽、丢包/乱序/重启必须联调。
-该样本点消息仍未启用，不声称 QGC 已能展示样本点。当前载荷已有 26 个遥测字段（含 `USV_ADS/USV_PROTO`），`USVE1` 只传关联任务事件；两者都不是该样本点消息。USV_DONE/USV_FAIL 不依赖样本点消息送达。后续可靠交付需另设计 ACK/补传，不能用固定重发次数假称 exactly-once。
+当前地面站通过既有载荷遥测、`USVE1` 任务事件和 Web 采样记录查看结果。31021 终态依据采样身份推进飞控任务，样本点数据另由 Web 记录。
 
 ## 涉及文件与原因
 

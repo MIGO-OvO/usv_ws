@@ -30,7 +30,7 @@ Updated: 2026-10-19
 | `src/usv_ros/scripts/stop_usv_all.sh` | 停止主系统/router/roscore |
 | `src/usv_ros/scripts/status_usv_all.sh` | 进程、热点、MAVROS、bridge 诊断 |
 | `src/usv_ros/scripts/usvctl.sh` | `usvctl/usvon/usvoff/usvdeploy` 分发入口 |
-| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP 有界完整写、26 字段遥测、关联事件、命令/ACK；匹配成功/SKIP 结果门控 `USV_DONE` |
+| `src/usv_ros/scripts/usv_mavlink_router_bridge.py` | router TCP 有界完整写、26 字段遥测、31021 握手、关联事件与命令 ACK |
 | `src/usv_ros/scripts/lib/payload_protocol.py` | 持久化请求去重、会话计数、ASCII 有界事件编码 |
 | `src/usv_ros/scripts/rotate_runtime_logs.py` | 默认预览的受控日志维护；不自动启用 |
 | `src/usv_ros/scripts/mavlink_trigger_node.py` | `31010..31019` 命令解释、采样状态机、航点采样、实验液滴事件发布 |
@@ -73,11 +73,11 @@ Updated: 2026-10-19
 | 路径 | 职责 |
 |---|---|
 | `ardupilot-usv/AGENTS.md` | 固件仓库 AI 贡献规则 |
-| `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` | `NAMED_VALUE_FLOAT` 缓存、`USV_DONE` 处理、MAVLink 消息入口 |
+| `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` | `NAMED_VALUE_FLOAT` 缓存与 31021 消息入口 |
 | `ardupilot-usv/Rover/sensors.cpp` | `usv_telemetry_send()`，2 Hz 调度各链路 |
 | `ardupilot-usv/Rover/USVPayload.h` | 固定 26 字段表、逐字段时间与回绕安全 TTL |
 | `ardupilot-usv/Rover/Rover.h` | `usv_payload` 结构体字段 |
-| `ardupilot-usv/Rover/mode_auto.cpp` | mission script/NAV_SCRIPT_TIME 相关逻辑 |
+| `ardupilot-usv/Rover/mode_auto.cpp`、`Rover/usv_sampling.cpp` | AUTO 航线、采样航点驻留、31021 身份和终态 |
 | `ardupilot-usv/libraries/GCS_MAVLink/` | MAVLink 路由、流控、消息基础实现 |
 | `ardupilot-usv/wscript`、`./waf` | 固件构建入口 |
 
@@ -108,7 +108,7 @@ Updated: 2026-10-19
 | QGC 发命令 ROS 不响应 | `USVFirmwarePlugin.cc` -> `usv_mavlink_router_bridge.py` -> `mavlink_trigger_node.py` |
 | QGC 不显示载荷 | `usv_mavlink_router_bridge.py` -> `GCS_MAVLink_Rover.cpp` -> `sensors.cpp` -> `USVPayloadFactGroup.cc` |
 | Web 不显示系统健康 | `system_health_node.py` -> `/usv/system_health` -> `web_config_server.py` -> `frontend/src/components/system-health-card.tsx` |
-| 航点采样不继续 | `mode_auto.cpp` -> `USV_SMPL/USV_DONE` -> `mavlink_trigger_node.py` |
+| 航点采样不继续 | `usv_sampling.cpp` → 31021 → bridge → `mavlink_trigger_node.py` 与 pump 清理结果 |
 | router/MAVROS 冲突 | `common_env.sh`、`usv_bringup.launch` |
 | 分光或健康数据无效 | `pump_control_node.py`、`DetFirmware/src/main.cpp`、Web Socket.IO payload |
 | 污染物浓度或热力图异常 | `web_config_server.py` -> `frontend/src/pages/Map.tsx` -> `tests/test_hardware_runtime_sync.py` |
@@ -129,7 +129,7 @@ Updated: 2026-10-19
 ## 污染物地图边界
 
 - 污染物线性模型、校准元数据、点质量、GeoJSON/CSV 导出和 IDW 热力图 surface 的源码归属 `src/usv_ros`。
-- 不在 `ardupilot-usv/` 增加污染物浓度计算、历史记录或热力图逻辑；固件只处理 `USV_SMPL/USV_DONE` 和载荷遥测转发。
+- `ardupilot-usv/` 处理采样航点导航、31021 握手和载荷遥测转发。ROS 处理浓度、记录与热力图。
 - 不在 `DetFirmware/` 增加污染物浓度输出；检测装置固件保持分光原始量、电压、valid、基线和健康帧职责。
 - 第一阶段不在 `WQ-USV-QGroundControl/` 实现污染物热力图；QGC 只保留任务、命令和遥测展示边界。
 - 实验仿真液滴生成、科研 surface 与 300 DPI/SVG/PDF 图件导出的源码归属 `src/usv_ros/scripts/lib/lab_sim/`；坐标 schema v2 反算和持久化由 `web_config_server.py` 承载。ArduPilot/DetFirmware/QGC 不参与。

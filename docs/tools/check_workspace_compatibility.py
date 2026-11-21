@@ -18,9 +18,10 @@ SOURCE_HASH_FORMAT = 'sha256-text-lf+untracked-bytes-v1'
 REPOS = {
     'ros': ('src/usv_ros', ['scripts/pump_control_node.py', 'scripts/mavlink_trigger_node.py',
                            'scripts/usv_mavlink_router_bridge.py', 'scripts/web_config_server.py',
-                           'scripts/lib/web_access.py', 'scripts/lib/payload_protocol.py',
+                           'scripts/lib/web_access.py', 'scripts/lib/payload_protocol.py', 'scripts/lib/fcu_sampling.py',
                            'scripts/lib/injection_pump_worker.py', 'launch/usv_bringup.launch']),
-    'fcu': ('ardupilot-usv', ['Rover/mode_auto.cpp', 'Rover/GCS_MAVLink_Rover.cpp', 'Rover/sensors.cpp', 'Rover/USVPayload.h']),
+    'fcu': ('ardupilot-usv', ['Rover/mode_auto.cpp', 'Rover/usv_sampling.cpp', 'Rover/GCS_MAVLink_Rover.cpp',
+                            'Rover/sensors.cpp', 'Rover/USVPayload.h']),
     'qgc': ('WQ-USV-QGroundControl', ['custom/src/USVPayloadFactGroup.cc', 'src/MissionManager/MavCmdInfoRover.json',
                                     'custom/res/USVPayloadCommandController.qml', 'src/MAVLink/StatusTextHandler.cc']),
     'detector': ('DetFirmware', ['src/main.cpp', 'src/ads122c04.h', 'src/protocol_packets.h',
@@ -94,8 +95,10 @@ def check_contract(root=ROOT):
                  'MotorControlApp_Pyside6/src/ui/mixins/serial_mixin.py'):
         contains(path, ['CAP=WATCHDOG1', 'WATCHDOG:ARM', 'WATCHDOG:KEEPALIVE', 'STOPALL'])
     contains('DetFirmware/src/protocol_packets.h', ['SPECTRO_STATUS_TEST', '0x10'])
-    contains('src/usv_ros/scripts/usv_mavlink_router_bridge.py', ['USV_FAIL', '_measurement_timeout'])
-    contains('ardupilot-usv/Rover/mode_auto.cpp', ['USV_FAIL', 'link_lost', 'ModeReason::FAILSAFE'])
+    contains('src/usv_ros/scripts/usv_mavlink_router_bridge.py', ['fcu_sampling.MESSAGE_TYPE', '_measurement_timeout'])
+    contains('src/usv_ros/scripts/lib/fcu_sampling.py', ['MESSAGE_TYPE = 31021', '<BBQHHH'])
+    contains('ardupilot-usv/Rover/usv_sampling.cpp', ['sampling_message_type = 31021', 'owner_timeout_ms',
+                                                    'ModeReason::FAILSAFE'])
     contains('src/usv_ros/scripts/pump_control_node.py', ['transaction_only', "action == 'automation_start'"])
     return errors
 

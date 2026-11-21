@@ -23,7 +23,7 @@ Updated: 2026-10-21
 | `COMMAND_LONG 31010..31019` | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` | 确认命令接收、参数、ACK 时机 |
 | `NAMED_VALUE_FLOAT` 载荷字段 | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`Rover/sensors.cpp`、`Rover/Rover.h` | 确认字段名、缓存结构、2 Hz 转发 |
 | MAVLink 路由/过滤 | `ardupilot-usv/libraries/GCS_MAVLink/` | 确认路由规则、payload 限制、转发策略 |
-| NAV_SCRIPT_TIME 采样闭环 | `ardupilot-usv/Rover/mode_auto.cpp`、`src/usv_ros/scripts/usv_mavlink_router_bridge.py` | 确认 `USV_SMPL` 与 `USV_DONE` 闭环 |
+| NAV_SCRIPT_TIME 采样闭环 | `ardupilot-usv/Rover/usv_sampling.cpp`、`src/usv_ros/scripts/usv_mavlink_router_bridge.py` | 核对驻留、31021 身份和终态 |
 
 禁止只按通用 MAVLink 文档或经验改 ROS/QGC 代码。
 
@@ -34,7 +34,7 @@ Updated: 2026-10-21
 - ROS `mavlink_trigger_node.py` 解释命令，控制采样/校准/走航/分光。
 - ROS `usv_mavlink_router_bridge.py` 以 `NAMED_VALUE_FLOAT` 发送 26 个载荷字段，其中 5 个为系统健康字段；新增能力与采集状态为 `USV_PROTO/USV_ADS`。
 - ArduRover `GCS_MAVLink_Rover.cpp` 缓存字段，`sensors.cpp` 以 2 Hz 转发到 GCS。
-- `NAV_SCRIPT_TIME(param1=1)` 触发时，固件发 `USV_SMPL`；ROS 完成采样后回 `USV_DONE`。
+- `NAV_SCRIPT_TIME(param1=1)` 在 AUTO 内驻留后走 `V2_EXTENSION 31021` 握手。ROS 返回匹配终态，飞控控制续航和模式。
 
 ## 多仓库提交边界
 

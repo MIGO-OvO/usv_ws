@@ -39,22 +39,18 @@ ESP32 detector firmware
 ## 采样任务闭环
 
 ```text
-NAV_SCRIPT_TIME(param1=1)
-  -> ardupilot-usv sends NAMED_VALUE_FLOAT USV_SMPL
-  -> usv_mavlink_router_bridge.py publishes /usv/mavlink_cmd_rx
-  -> mavlink_trigger_node.py starts ROS sampling
-  -> trigger_status sampling_started
-  -> pump_control_node.py executes detector sequence
-  -> sampling_result {source:fcu, sample_id, outcome:succeeded}
-  -> usv_mavlink_router_bridge.py sends NAMED_VALUE_FLOAT USV_DONE
-  -> ardupilot-usv mode_auto resumes script
+采样航点 -> NAV_SCRIPT_TIME(param1=1) -> AUTO 内驻留
+  -> 31021 OFFER / READY / START
+  -> bridge -> /usv/fcu_sampling -> trigger -> pump
+  -> /usv/sampling_result -> bridge -> 31021 终态
+  -> 飞控按结果继续航线、LOITER 或 HOLD
 ```
 
 ## 当前能力
 
-`sampling_stopped` 不触发飞控完成通知；有 attempt 的真实 Web 窗口需匹配最终结果后关窗，不凭 pump finished 提前成功。失败/取消不发送 `USV_DONE`；明确配置的 SKIP 以 `skipped` 结果放行，不标记为成功。safety1 飞控对采样超时/伴随链路失联默认 HOLD，并支持双向 `USV_FAIL`；ESP32 `WATCHDOG1` 处理主机失联停机。SITL 已验证，实际船态、物理输出与跨重启行为仍需台架验收。
+飞控负责到点、稳船和任务推进。ROS 负责载荷准入、清理和记录。飞控收到同一采样身份的 DONE 或 SKIP 后继续航线，Web 依据同一 attempt 的最终结果结束记录。ESP32 `WATCHDOG1` 在主机失联时停止设备输出。
 
-- 航线定点采样只使用 `MAV_CMD_NAV_SCRIPT_TIME`，`param1=1` 表示 USV 定点采样，`param2` 为 1..255 秒超时。
+- 航线定点采样使用 `MAV_CMD_NAV_SCRIPT_TIME(param1=1)`。新任务默认总时限 1800 秒，`param3=0` 时沿用旧 `param2`。
 - `COMMAND_LONG 31010..31019`：手动采样、停止、暂停、恢复、校准、走航、基线、分光启停。
 - 26 个 `NAMED_VALUE_FLOAT` 载荷字段：原 22 项加 `USV_LOOP/LTOT`、`USV_ADS/PROTO`，字段清单以 `Rover/USVPayload.h` 为准。
 - 固件缓存载荷字段并以 2 Hz 转发到 GCS。

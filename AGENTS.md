@@ -64,7 +64,7 @@ usv_ws/
 
 ```bash
 # 根文档/路径静态检查优先
-rg -n "USV_SMPL|USV_DONE|31010|31019|NAMED_VALUE_FLOAT" docs/current src/usv_ros ardupilot-usv/Rover WQ-USV-QGroundControl/custom DetFirmware/src
+rg -n "31021|31010|31019|NAMED_VALUE_FLOAT" docs/current src/usv_ros ardupilot-usv/Rover WQ-USV-QGroundControl/custom DetFirmware/src
 
 # ROS 常用离线验证（在有 Python/ROS 环境时）
 python3 -m py_compile src/usv_ros/scripts/*.py
@@ -77,5 +77,5 @@ cd src/usv_ros/frontend && npm run build
 ## NOTES
 
 - 航线定点采样使用 `MAV_CMD_NAV_SCRIPT_TIME(param1=1)`；手动载荷控制使用 `COMMAND_LONG 31010..31019`。
-- ROS 通过 `USV_DONE` 通知固件继续 mission script；固件发 `USV_SMPL` 触发 ROS 定点采样。
+- 飞控在 AUTO 内驻留后通过 31021 发起定点采样，收到同身份 DONE 或 SKIP 后继续航线。
 - 检测装置串口协议变更必须同时核对 `DetFirmware/src/main.cpp` 与 `src/usv_ros/scripts/pump_control_node.py`。

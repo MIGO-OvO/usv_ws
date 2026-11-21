@@ -24,9 +24,10 @@ Updated: 2026-10-23
 | `/usv/payload_command` | `String(JSON)` | bridge -> trigger | `{executor, values:[cmd,param1,param2,target_sys,target_comp,src_sys,src_comp,request,session,tcp_session]}`，固定首次转发的执行实例；`recover_only:true` 只查询已知结果 |
 | `/usv/payload_protocol` | `String(JSON)` | trigger -> bridge | `{version,executor,tcp_session,source_monotonic}`；回显已处理的 TCP 会话，供 bridge 安排结果恢复 |
 | `/usv/mavlink_cmd_rx` | `Float32MultiArray` | bridge -> trigger | 旧 7 元飞控内部事件、无关联兼容 STOP；关联请求须经执行实例封装 |
+| `/usv/fcu_sampling` | `String(JSON)` | bridge -> trigger | 本次航点采样的 `start/cancel`、`fcu_token`、`sample_id`、`waypoint_seq`、`waypoint_index` |
 | `/usv/mavlink_cmd_ack` | `Float32MultiArray` | trigger -> bridge | `[cmd,result,target_sys,target_comp,tcp_session]`，过滤旧 TCP 会话；兼容旧 4 元 ACK |
 | `/usv/trigger_status` | `String` | trigger -> bridge/Web | 采样状态事件 |
-| `/usv/sampling_result` | `String(JSON)` | trigger -> bridge/Web | 各 trigger 来源的 `attempt_id/source/outcome/reason` 最终结果；FCU 另带整数 1..65535 的 `sample_id`；非 latched |
+| `/usv/sampling_result` | `String(JSON)` | trigger -> bridge/Web | `attempt_id/source/outcome/reason`。FCU 附 `sample_id`、`fcu_token` 及准入结果。Web 按最终结果关窗 |
 | `/usv/sample_record` | `String(JSON)` | trigger -> 记录消费者 | 采样终态 SampleRecord：UUID sample_id、开始 GPS 快照、起止时间、光谱/水质；非 latched，详见 `80_sample_gps_binding.md` |
 | `/usv/mission_status` | `String` | trigger -> bridge | 状态码来源 |
 | `/usv/automation_status` | `String(JSON)` | pump -> bridge/Web | 自动化运行、暂停、步骤和 PID 状态 |
@@ -51,7 +52,17 @@ Updated: 2026-10-23
 
 | Command | 参数 | 语义 | 主要处理 |
 |---:|---|---|---|
-| 42702 `MAV_CMD_NAV_SCRIPT_TIME` | `param1=1`，`param2=1..255` 秒，`param3..6=0` | USV 定点采样，飞控发送 `USV_SMPL`，ROS 完成后回 `USV_DONE` | `ardupilot-usv/Rover/mode_auto.cpp`、`usv_mavlink_router_bridge.py` |
+| 42702 `MAV_CMD_NAV_SCRIPT_TIME` | `param1=1`。总时限优先取 `param3=1..2048` 秒，否则取 `param2`，均为 0 时取 255 秒 | 紧跟采样航点。飞控在 AUTO 内按航点坐标驻留，并通过 31021 与 ROS 交接 | `ardupilot-usv/Rover/usv_sampling.cpp`、`usv_mavlink_router_bridge.py` |
+
+`V2_EXTENSION.message_type=31021` 在同一 sysid 的 FCU component 1 和 companion component 191 间寻址。payload 开头为小端 `<BBQHHH>`，依次是版本 1、操作、64 位 token、sample ID、飞控航点序号和从 0 开始的导航航点索引。索引跳过 Home 和其他任务项。
+
+| 操作 | 方向 | 含义 |
+|---|---|---|
+| 1 OFFER、2 READY | 飞控 → ROS、ROS → 飞控 | 通知稳定已达标并确认链路 |
+| 3 START、4 ACCEPTED | 飞控 → ROS、ROS → 飞控 | 单次启动，泵控状态续约 |
+| 5 DONE、6 SKIP | ROS → 飞控 | 同身份的成功或显式跳过，随后继续任务 |
+| 7 FAILED_LOITER、8 FAILED_HOLD | ROS → 飞控 | 当前尝试失败，选择驻留或停止推进 |
+| 9 CANCEL | 飞控 → ROS | 清理当前尝试 |
 
 ## MAVLink Manual Commands
 
@@ -147,9 +158,9 @@ ROS bridge 启动后立即发送 component 191 心跳，trigger 的 MAVROS 服�
 | `USV_EHEAP` | ESP32 可用 heap 百分比，单位 `%`；未知为 `-1` |
 | `USV_ADS` | 0 未知、1 停止确认、2 启动中、3 采集中、4 错误、5 停止未确认 |
 | `USV_PROTO` | 当前关联请求协议版本 1；过期/未知不得开放新动作 |
-| `USV_SMPL` | 固件在 `NAV_SCRIPT_TIME(param1=1)` 触发 ROS 定点采样 |
+| `USV_SMPL` | 旧飞控兼容的定点采样触发 |
 | `USV_SURV` | 固件触发走航采样开关 |
-| `USV_DONE` | 仅在匹配 ID 的 `succeeded` 或明确 `skipped` 结果后，ROS 通知固件结束采样等待 |
+| `USV_DONE/USV_FAIL` | 旧飞控兼容的采样完成和取消通知 |
 
 ### 停止结果、恢复与准备门禁
 
@@ -237,17 +248,11 @@ trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `T
 
 - 采样结果可附加 `sample_record`；其 UUID 与顶层 FCU 握手 `sample_id` 不同。GPS 可选；存在新鲜有效定位时冻结起点，缺失时记录空坐标且结束不回填。真实测量/基线门禁仍强制。Web sample_windows 保留旧字段并增加统一记录字段，详见 [采样 GPS 绑定](80_sample_gps_binding.md)。WQ_SAMPLE_POINT 仍未实现。
 
-- `sampling_stopped` 不触发 `USV_DONE`；Web 关窗还需匹配 attempt 的最终结果，避免 pump finished 早于 trigger 清理失败。
-- `outcome` 仅接受 `succeeded/failed/cancelled/skipped`。失败、取消、非 FCU 来源、ID 不匹配或非法结果均不放行。
-- FCU 启动失败、执行失败按 `sampling_on_fail` 处理：HOLD/ABORT 请求 HOLD 且不放行；明确 SKIP 才发布 `skipped` 允许放行。主动取消不受 SKIP 策略影响。忙碌拒绝不会中断已有采样。
-- 自动化正常结束为 `finished`，直接停止为 `stopped`，异常为 `failed`；不得把后两者解释成成功。
-- bridge 先登记 ID 再发布触发；最近同 ID 重复触发不重启采样，终态结果只接受一次，新 ID 清除尚未发送的旧完成通知。
-- safety1 固件对 `param1=1` 的采样脚本：超时或伴随遥测超过 3 秒未更新时停止当前导航输出并进入 HOLD，不自动放行；其他脚本保留原有超时语义。`param2=0` 对 USV 采样按 255 秒上限处理。
-- ROS `set_mode` 在请求发送后最多等待 3 秒观测实际模式；`mode_sent` 不再等同于模式已生效。HOLD 不是原地定位保持，实际船态仍需实测。
-- 人工 MANUAL/RTL 接管优先于迟到的旧采样失败；ROS 取消旧采样而不回切模式，飞控 `USV_FAIL` 只作用于当前 AUTO 中匹配的采样。非 USV 脚本进入失败不继承上一 USV 的超时状态。
-- 控制事件 `USV_FAIL(sample_id)`：ROS 失败/取消通知飞控 HOLD；飞控超时也用同名事件通知 bridge 取消匹配采样。它不计入 26 个显示遥测字段。飞控只接受本 sysid、component 191 的载荷消息；bridge 只接受本 sysid、component 1 的飞控事件。
-- `USV_DONE/USV_FAIL` 仍为有限传输重试，不具备端到端 ACK 或持久化交付；未引入飞控跨重启会话 ID。丢包时安全兜底是 HOLD，而不是宣称任务必定完成。FCU 仍不走旧 waypoint 自动重试路径。
-- 更新必须停机并成套重启 trigger/bridge/pump；不得混用新旧进程。命令号不变，当前显示字段为 26 项；必须配套更新飞控和 QGC。
+- AUTO 在采样航点的 `LOIT_RADIUS` 范围内驻留。地速 ≤0.15 m/s 且偏航角速度 ≤0.08 rad/s 持续 3 秒后启动握手。稳船超时为 30 秒。
+- bridge 在本轮 TCP 发送窗口发送 READY。收到身份匹配的 START 后投递一次。泵控接单后回 ACCEPTED，随后使用同身份的泵控状态续约。终态同时匹配 token 和 sample ID。
+- 只有 `succeeded` 和明确的 `skipped` 推进飞控任务。Web 以匹配 attempt 的最终结果关窗。拒绝启动、执行失败和清理由各自的结果字段记录。
+- 失败策略支持 LOITER、HOLD、SKIP、ABORT。LOITER 需要清理确认和可用定位。取消、未确认启动、采样总时限耗尽、伴随遥测或本次采样续约超时进入 HOLD。操作者切出 AUTO 时保留选定模式并取消对应尝试。
+- 旧飞控的 `USV_SMPL/USV_DONE/USV_FAIL` 由 bridge 兼容。新版 31021 终态仅在当前连接有界重发。更新前停止任务和输出，成套部署飞控和 ROS 的 bridge、trigger、pump、Web。
 
 ### safety1 本地采样事务
 
@@ -310,7 +315,7 @@ trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `T
 
 - 第一阶段污染物浓度计算、采样点质量标记、历史 GeoJSON、CSV 和 IDW 热力图 surface 均由 ROS/Web 承载：`src/usv_ros/scripts/web_config_server.py` 与 `src/usv_ros/frontend/`。
 - QGC 第一阶段不显示污染物热力图；QGC 继续承担任务规划、手动/走航采样命令、载荷遥测和采样数据页入口。
-- ArduPilot 只保留 mission script、`USV_SMPL/USV_DONE` 闭环和 `NAMED_VALUE_FLOAT` 载荷转发，不计算污染物浓度，不保存污染物历史数据，不生成热力图。
+- ArduPilot 负责采样航点导航、31021 握手和 `NAMED_VALUE_FLOAT` 载荷转发。污染物浓度、历史数据和热力图由 ROS 处理。
 - DetFirmware 只输出 raw code、电压、吸光度、valid、基线和健康状态，不输出污染物浓度。
 
 ## 实验仿真液滴事件与科研导出

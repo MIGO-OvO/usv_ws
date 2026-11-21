@@ -219,28 +219,28 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 
 | 步骤 | 观测点 | 通过标准 |
 |---|---|---|
-| 固件触发 | `NAV_SCRIPT_TIME(param1=1)` | ROS bridge 收到 `USV_SMPL` |
+| 固件触发 | `NAV_SCRIPT_TIME(param1=1)`、飞控位置与地速 | 船在采样半径内稳定后才出现 31021 START |
 | ROS 采样 | `/usv/trigger_status`、`/usv/pump_status` | 出现 `sampling_started`，状态进入采样并执行序列 |
 | QGC/Web 记录 | QGC 采样数据页、Web 数据中心 | `USV_SCNT` 为启动次数而非成功计数；Web 新任务记录有效数据点增长，成功另看匹配终态 |
-| 完成通知 | bridge 日志、固件行为 | ROS 发 `USV_DONE`，固件继续 mission script |
-| 失败策略 | 配置 `HOLD/SKIP/ABORT` | 行为与配置一致 |
+| 完成通知 | bridge 日志、飞控任务序号 | 收到同一身份的 DONE 或 SKIP 后继续航线 |
+| 失败策略 | 配置 `LOITER/HOLD/SKIP/ABORT` | 清理结果与实际飞控模式符合配置 |
 
 ## FCU 采样结果安全回归
 
 离线：在 `src/usv_ros` 执行 `python3 -m unittest discover -s tests -p 'test_fcu_sampling_result.py'`。测试使用真实 trigger/bridge 方法和模拟传输，不连接设备。
 
-现场需同步记录 `/usv/sampling_result`、`/usv/trigger_status`、`/mavros/state` 与 MAVLink 消息：
+现场同步记录 `/usv/fcu_sampling`、`/usv/sampling_result`、`/usv/automation_status`、`/mavros/state`、Pixhawk DataFlash 与 MAVLink 消息。
 
 | 场景 | 通过标准 |
 |---|---|
-| 正常完成 | 同 ID `succeeded` 后才有 `USV_DONE`；重复结果不重复放行 |
-| 进样启动失败、自动化启动失败、PID 超时 | HOLD/ABORT 下为 `failed`，无 `USV_DONE`，记录窗口结束；单独确认实际 HOLD |
-| QGC 31011、Web 自动化停止 | `cancelled`，无 `USV_DONE`；停止服务期间到达的 finished 不可覆盖取消 |
-| 明确 SKIP | 结果为 `skipped` 而非成功，允许同 ID `USV_DONE` |
-| 重复触发、旧 ID/非法/非 FCU 结果 | 不重复采样，不释放当前新 ID；新 ID 清除未发送的旧完成通知 |
-| 普通 sampling_stopped | 不生成完成通知；有 attempt 的真实窗口等待匹配最终结果后关窗 |
+| 正常完成 | 只启动一次。匹配 `succeeded` 产生 DONE，飞控继续下一航点 |
+| 进样启动失败、自动化启动失败、PID 超时 | 记录首因和清理结果，飞控按策略 LOITER 或 HOLD |
+| QGC 31011、Web 自动化停止 | 本次尝试取消，检测输出停止，航点未推进 |
+| 明确 SKIP | 匹配 `skipped` 产生 SKIP，按策略继续任务 |
+| 重复启动、旧 token、错误来源 | 当前尝试维持原状态，物理启动累计一次 |
+| 外部 LOITER、MANUAL 或 RTL 接管 | 对应采样取消，保持操作者选定模式 |
 
-必须停机更新并成套重启 trigger/bridge/pump。离线测试不能证明实际船态、跨重启 ID 复用或无线端到端送达；safety1 的超时/失联 HOLD 必须补 SITL 和实船验收。
+停机更新飞控并一起重启 trigger、bridge 和 pump。离线通过后，在安全水域记录 LOITER 驻留误差、到点交接耗时和停机输出。
 
 ## safety1 安全回归与发布门槛
 
@@ -248,8 +248,8 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 
 - ROS：`python -B -m unittest discover -s tests -p 'test_system_safety_contract.py'`、`test_sampling_context_contract.py`、`test_web_control_access.py`，再跑全量 `test_*.py`。
 - 串口联合黄金帧：ROS 下 `python -B -m unittest discover -s tests -p test_detector_protocol_contract.py`；完整工作区及 PySide6 可用时，将同一有效/测试/坏校验帧分片送入 ROS 和 Windows 的真实解析器比较。
-- ArduPilot（Linux/WSL）：`python3 -B tests/test_usv_sampling_safety.py`，执行真实 verifier 函数的宿主 C++ 回归；不是 SITL。另按 runbook 编译目标固件。
-- 隔离 SITL：在 ArduPilot 仓库构建 Rover 后运行 `python3 -B tests/check_usv_sitl_sampling.py --binary build/usv-safety-sitl/sitl/bin/ardurover --scenario all`，按实际构建目录调整路径。脚本创建私有仿真进程和回环 UDP（默认实例178），不连接既有飞控，检查成功/取消/超时/伴随失联/MANUAL接管/RTL接管六场景，并断言同 ID 失败通知、时间窗与迟到 DONE 后不推进。
+- ArduPilot 在 Linux 或 WSL 运行 `python3 -B tests/test_usv_sampling_safety.py`，检查脚本分流和 ChibiOS 随机数补齐边界。按 runbook 编译 Pixhawk6C。
+- Rover SITL 运行 `python3 -B tests/check_usv_sitl_sampling.py --binary build/sitl/bin/ardurover`。使用独立仿真进程和回环 UDP，检查成功、跳过、失败、超时、失联和模式接管。
 - DetFirmware：`python -m pytest tests -q`；Linux/WSL `python3 -B tests/test_control_watchdog_native.py`；`pio run -e nodemcu-32s`。源码测试不替代实际电机停机测试。
 - Windows：`python -m pytest tests -q`；QGC：`python -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`。
 - 总仓库：`python docs/tools/check_workspace_compatibility.py`、`python -m unittest discover -s docs/tools`。
@@ -258,16 +258,17 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 
 | 场景 | 必须观测 |
 |---|---|
-| AUTO 内采样超时、bridge 断连、ROS 失败、取消 | 飞控实际 HOLD；不推进后续航点；检测输出停止；无成功采样结果（记录文件结束不等于采样成功） |
+| AUTO 内采样超时、bridge 断连、取消 | 飞控进入 HOLD、任务序号停在采样项、检测输出停止 |
+| ROS 失败且清理已确认 | LOITER 策略保持航点，HOLD 或 ABORT 策略停止推进 |
 | 人工切 MANUAL/RTL 后迟到失败 | 取消旧采样，保留操作者选择的飞行模式 |
-| 明确 SKIP | 只在同 ID `skipped` 后放行；超时/失联本身不算 SKIP |
+| 明确 SKIP | 匹配当前身份的 `skipped` 后推进航点 |
 | USB 拔除、控制进程终止、Windows UI 卡死 | ESP32 约 3 秒心跳期限后停止全部执行器；迟到心跳/旧运动命令不复位锁存 |
-| trigger/Web owner 进程终止 | pump 约 5 秒后取消本次自动化；FCU owner 丢失触发 `USV_FAIL`；重启不续跑旧步骤 |
+| trigger/Web owner 进程终止 | pump 约 5 秒后取消本次自动化。FCU 采样进入 HOLD，重启后等待新任务 |
 | 校准/PID 测试/开环运行中各停止入口 | STOPALL、Web 急停、QGC 停采样均不产生后续动作；暂停不能被错误转成完成 |
 | 运行中重连 | 原采样取消；新连接 ARM 前停输出；不得返回旧任务 succeeded |
 | ADS 停流/错误/FULL 压测 | 有效位及时清零；测试帧不进入真实记录；基线不得使用过期测量 |
 | 两个来源同时启动/迟到步骤 | 恰好一个启动成功；执行其提交的配置和 attempt_id；另一个明确拒绝 |
-| 整船重启/丢失 USV_DONE | 不自动将旧 ID 放行；人工确认当前船态与采样状态；本版本尚无跨重启交付保证 |
+| 整船重启或丢失 DONE | 过期结果无法推进当前任务，人工确认船态与载荷输出 |
 
 验收记录须含五端提交号、固件/应用产物 SHA-256、配置快照、事件日志和实际执行器证据。不得仅凭通过源码契约检查标记为可上船。
 
@@ -314,7 +315,7 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 | IDW surface | `GET /api/data/mission/<mission_id>/surface?metric=concentration&size=80&power=2&download=true` | `surface_grid`、`power`、有效点数和污染物单位写入 `meta` |
 | 实时快照 | `GET /api/map/live` | 包含当前 surface、轨迹、`survey_status` 与 `mapping_profile` |
 | 桌面截图 | Web 地图页 16:9 | 点位、热力图、图例、质量统计、走航门控状态均可见 |
-| MAVLink 日志 | `grep -E "USV_SMPL|USV_DONE|USV_SURV|survey_gate_skipped" usv_system.log` | 定点采样存在 `USV_SMPL/USV_DONE` 闭环；走航跳过只记录门控原因 |
+| MAVLink 日志 | FCU 与 Jetson 同时段日志 | 定点采样核对 31021 握手与终态，走航核对 `USV_SURV` 和 `survey_gate_skipped` |
 
 ## 现场验证记录模板
 
@@ -339,4 +340,4 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 | `surface_grid` / `idw_power` |  |
 | `survey_min_distance_m` / `last_gate_reason` |  |
 | `screenshot_path` |  |
-| `USV_SMPL/USV_DONE` 日志 |  |
+| 31021 航点采样日志 |  |

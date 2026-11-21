@@ -36,5 +36,5 @@
 
 ```bash
 find docs/current -maxdepth 1 -type f -name '*.md' | sort
-rg -n "USV_SMPL|USV_DONE|31010|31019|NAMED_VALUE_FLOAT|DET_ID" docs/current
+rg -n "31021|31010|31019|NAMED_VALUE_FLOAT|DET_ID" docs/current
 ```

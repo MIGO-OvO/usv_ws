@@ -6,7 +6,7 @@ Updated: 2026-10-23
 
 ### safety1 成套发布要求
 
-本版本不得只更新 ROS：DetFirmware/ROS/Windows 要匹配 `WATCHDOG1`；飞控/QGC 要匹配超时 HOLD 和 `USV_FAIL` 语义。更新前停任务和执行器，保留上一整套产物与参数；不要在运行中混用进程版本。
+更新前停止任务和执行器，保存上一套产物及参数。航点采样须同步部署支持 31021 的 ArduRover、ROS bridge、trigger、pump 和 Web，并重建使用 LOITER 的地面站。检测装置沿用 `WATCHDOG1`。上水前以 `FRAME_CLASS=2`、有效定位和适合本船的 `LOIT_RADIUS` 进行台架及低速验证。
 
 在总仓库运行 `python docs/tools/check_workspace_compatibility.py` 做源码检查；`--snapshot` 将候选五端提交号、工作树状态及关键文件哈希打印为 JSON。保存候选后用 `--manifest <候选文件>` 检查匹配。`--require-release` 额外拒绝脏子仓库、未记录现场验收、缺少证据引用/产物哈希的清单。脚本不部署、不修改仓库，不是自动认证器。
 

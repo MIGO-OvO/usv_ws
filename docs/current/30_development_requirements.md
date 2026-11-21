@@ -14,7 +14,7 @@ Updated: 2026-10-19
 | 26 字段载荷遥测与独立年龄 | 源码完成，待现场验收 | `usv_mavlink_router_bridge.py`、`ardupilot-usv/Rover/USVPayload.h` |
 | Jetson/ROS/ESP32 健康监测 | 已完成 | `system_health_node.py`、`pump_control_node.py`、Web 监控页 |
 | 固件侧字段缓存与 2 Hz 转发 | 已完成 | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`Rover/sensors.cpp` |
-| `NAV_SCRIPT_TIME -> USV_SMPL -> ROS采样 -> USV_DONE` | 已完成 | `usv_mavlink_router_bridge.py`、`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` |
+| 航点驻留与 31021 采样闭环 | 源码完成，待实船验收 | `ardupilot-usv/Rover/usv_sampling.cpp`、`usv_mavlink_router_bridge.py` |
 | Web 控制台与 API | 已完成 | `src/usv_ros/scripts/web_config_server.py`、`src/usv_ros/frontend/` |
 | 检测装置串口握手 | 已完成 | `src/usv_ros/scripts/pump_control_node.py` |
 | 系统启动脚本与 `usvctl` | 已完成 | `src/usv_ros/scripts/*.sh` |
@@ -23,9 +23,9 @@ Updated: 2026-10-19
 
 ### safety1 安全收口
 
-源码已加入采样超时 HOLD、`USV_FAIL`、设备 3 秒心跳超时停机锁存、本地采样 owner 续约、原子步骤启动、测量过期、测试数据隔离与 Web 写认证。需要五端成套更新；软件回归不代表现场完成。
+飞控采样超时或失联切到 HOLD。设备 3 秒心跳超时停机锁存，ROS 保留本地采样 owner 续约、原子步骤启动和测量过期判定。
 
-待验收/未解决的明确边界：实际 HOLD 与执行器停止时间、无线丢包及端到端完成确认、飞控跨重启 ID 复用、设备压力/故障注入。整船发布清单必须在独立子仓库提交并完成台架后锁定，不能以 dirty candidate 当成 release。
+现场验收覆盖 LOITER 驻留误差、实际 HOLD 与执行器停止时间、无线丢包、飞控重启和设备故障注入。台架完成后以各仓库提交和产物哈希锁定整船发布清单。
 
 | 方向 | 当前目标 | 验证入口 |
 |---|---|---|

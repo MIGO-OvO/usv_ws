@@ -15,8 +15,9 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue({'USV_LOOP', 'USV_LTOT', 'USV_ADS', 'USV_PROTO'} <= set(FIELDS))
         tokens = FIELDS + ['USVPayload::', 'usv_payload.fresh', 'send_usv_payload',
                           'CAP=WATCHDOG1', 'WATCHDOG:ARM', 'WATCHDOG:KEEPALIVE', 'STOPALL',
-                          'SPECTRO_STATUS_TEST', '0x10', 'USV_FAIL', '_measurement_timeout',
-                          'link_lost', 'ModeReason::FAILSAFE', 'transaction_only', "action == 'automation_start'"]
+                          'SPECTRO_STATUS_TEST', '0x10', 'fcu_sampling.MESSAGE_TYPE', '_measurement_timeout',
+                          'MESSAGE_TYPE = 31021', '<BBQHHH', 'sampling_message_type = 31021',
+                          'owner_timeout_ms', 'ModeReason::FAILSAFE', 'transaction_only', "action == 'automation_start'"]
         with patch.object(Path, 'read_text', return_value=' '.join(tokens)):
             self.assertEqual(check_contract(), [])
         with patch.object(Path, 'read_text', return_value=' '.join(t for t in tokens if t != 'USV_ADS')):
