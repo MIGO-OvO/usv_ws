@@ -1,6 +1,13 @@
 # 验证矩阵
 
-Updated: 2026-10-23
+Updated: 2026-11-23
+
+## QGC 构建与 CI 验收
+
+- 验收 **Windows 和 Android** 目标产物，包括用 Ubuntu、macOS 或 Docker 构建 Android 的共享步骤。Linux 桌面、AppImage 和 macOS 桌面产物在交付范围外。混合工作流只跟踪目标平台的 job。
+- 先跑改动直接涉及的逻辑测试，再用现有工具链、构建目录和矩阵验证最终提交。QML 小改走局部验证，ROS 只跑本次改动涉及的检查。
+- 同一提交只触发一次对应构建。先确认失败与改动的关系，修正代码或明确的环境问题后再重跑。旧的全仓 lint 问题记录在交付说明中，本次引入的问题就地修正。
+- 推送后核对当前提交的检查状态。长时间排队或运行时附实际状态和链接。若分支保护要求范围外的平台，报告配置与验收范围的差异，按现有保护规则处理。
 
 ## 采样请求 TCP 与结果恢复
 
@@ -66,12 +73,6 @@ Updated: 2026-10-23
 | Android | 现有 Android 工作流的本轮 head | 发布时 [PR run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39542755710) 与 [push run](https://github.com/MIGO-OvO/WQ-USV-QGroundControl/actions/runs/39542751177) 运行中，均由现有触发规则自动产生；未手动重复触发，未完成不能写通过 |
 | 文档与源码契约 | `python docs/tools/check_workspace_compatibility.py`；`python -B -m unittest discover -s docs/tools` | Source contracts match；11 通过、0 失败/跳过；各仓 diff --check 通过 |
 | 串口、台架、实机、抓包重放 | 本轮未执行 | 自动化与构建不替代现场验收；未部署、未刷写 |
-
-### 构建与 CI 范围
-
-长期规则见 `10_agent.md` 的“QGC 构建与 CI 验收”。构建验收只看 **Windows/Android 目标产物**；Ubuntu/macOS runner 或 Docker 构建 Android 仍计入。其他平台产物不排查详细失败、不修依赖、不重跑、不轮询等待，不作为本轮交付阻塞。保留改动相关的 QML/Python/ROS 逻辑验证，本轮不跑无关 ROS 全量回归。
-
-复用现有工具链、目录和矩阵，定向验证后对最终修改批次构建；同 head 不重复触发，代码或明确环境修正后才重跑相关失败，不用空提交或连续重跑刷绿。旧全仓 lint 只记录，本轮引入问题就地修正。推送后与交付前必要时查看相关状态，长时间排队/运行则如实交付链接；旧 head 的绿色结果不能代替当前 head。非目标平台若被要求为合并必需项，只报告配置与验收范围不一致，保留分支保护。
 
 ### 本轮最小实机验收（未执行）
 
@@ -254,7 +255,11 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 - Windows：`python -m pytest tests -q`；QGC：`python -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`。
 - 总仓库：`python docs/tools/check_workspace_compatibility.py`、`python -m unittest discover -s docs/tools`。
 
-必须人工/台架验收：
+### 待现场验收
+
+- 用同步日志核对 QGC、数传、飞控、router、MAVROS 与 ROS 的命令、应答、关联结果和遥测。特别核对 26 字段的新鲜度、component ID 和 `USV_STAT` 状态显示。
+- 记录航点驻留误差、采样开始和结束、故障后的实际 HOLD 和执行器停机时间。覆盖无线丢包、飞控重启、检测装置断线重连与分光有效位。
+- Windows 上位机与 ROS 分别连接真机，确认握手、看门狗和断线停机。台架完成后按整船版本条件记录产物哈希。
 
 | 场景 | 必须观测 |
 |---|---|
@@ -272,7 +277,7 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 
 验收记录须含五端提交号、固件/应用产物 SHA-256、配置快照、事件日志和实际执行器证据。不得仅凭通过源码契约检查标记为可上船。
 
-候选快照现为 schema 3：未跟踪且未忽略文件的规范路径、类型及原始内容/链接目标摘要纳入身份。旧 schema 2 清单须重新生成，不能直接比较。`--require-release` 仍拒绝 dirty 子仓库并要求验收与产物摘要；保留用户未跟踪文件的候选如实标 dirty，不等于发布门禁已通过。
+候选快照的 schema 和生成方法见[成套发布要求](50_build_update_runbook.md#safety1-成套发布要求)。
 
 ## 检测装置验证
 

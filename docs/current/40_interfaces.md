@@ -1,6 +1,6 @@
 # 接口速查
 
-Updated: 2026-10-23
+Updated: 2026-11-23
 
 ## ROS Launch
 
@@ -45,6 +45,17 @@ Updated: 2026-10-23
 | `/usv/bridge_diagnostics` | `String` | bridge -> Web | router bridge 诊断 |
 | `/usv/radio_status` | `String` | bridge -> Web | RADIO_STATUS 电台链路 |
 | `/usv/pump_reconnect` | `Trigger` | Web -> pump | 保存硬件配置后重连 |
+
+## 修改 MAVLink 时查源码
+
+先从飞控确认消息如何接收、关联和转发，再核对 ROS bridge、trigger 节点及地面站的使用方式。
+
+| 改动 | 从这里查 |
+|---|---|
+| 手动载荷命令 `31010..31019`、ACK 或 component ID | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`，然后核对 ROS `usv_mavlink_router_bridge.py` 的地址、参数和关联结果处理 |
+| `NAMED_VALUE_FLOAT` 字段、年龄或频率 | `ardupilot-usv/Rover/USVPayload.h`、`ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp` 和 `ardupilot-usv/Rover/sensors.cpp`，再核对 ROS 发送端和 QGC Fact |
+| MAVLink 路由、过滤或转发 | `ardupilot-usv/libraries/GCS_MAVLink/` 和对应消息在 Rover 的接收入口 |
+| 航点采样 `31021` | `ardupilot-usv/Rover/mode_auto.cpp`、`ardupilot-usv/Rover/usv_sampling.cpp`、`src/usv_ros/scripts/lib/fcu_sampling.py` 和 ROS bridge。核对驻留、采样身份、终态和飞控续航条件 |
 
 ## MAVLink Mission Command
 

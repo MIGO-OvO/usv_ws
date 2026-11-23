@@ -1,12 +1,12 @@
 # 系统概览
 
-Updated: 2026-10-19
+Updated: 2026-11-23
 
 ## 五端结构
 
 | 端 | 路径 | 运行平台 | 职责 |
 |---|---|---|---|
-| 地面站 | `WQ-USV-QGroundControl/` | Windows/Linux/macOS | 定制 QGC、发送 USV 命令、显示载荷遥测 |
+| 地面站 | `WQ-USV-QGroundControl/` | Windows / Android（交付验收） | 定制 QGC、发送 USV 命令、显示载荷遥测 |
 | 船载 ROS | `src/usv_ros/` | Jetson Nano / Ubuntu 20.04 / ROS Noetic | 泵控、Web、MAVROS、MAVLink bridge、任务编排 |
 | 飞控固件 | `ardupilot-usv/` | Pixhawk 6C | ArduRover、任务执行、载荷字段缓存与转发 |
 | 检测装置固件 | `DetFirmware/` | ESP32 | X/Y/Z/A 步进泵、PWM 进样泵、角度、ADS 分光采集 |
@@ -66,5 +66,19 @@ ESP32 detector firmware
 - Jetson 现场主链路必须先启动 `mavlink-routerd`，再启动 MAVROS 与 bridge。
 - `src/usv_ros/launch/usv_bringup.launch` 是默认 ROS 启动入口。
 - ArduPilot 固件构建必须在 WSL Ubuntu 或 Linux 环境执行。
-- QGC 构建由用户本地 Qt/QGC 环境验证。
-- 根仓库不纳入三大外部源码仓库版本历史。
+- QGC 构建见[构建与运行](50_build_update_runbook.md#qgroundcontrol)，目标产物见[验证矩阵](70_verification.md#qgc-构建与-ci-验收)。
+
+## 常用源码入口
+
+| 问题 | 源码 |
+|---|---|
+| 航点到达、驻留与任务推进 | `ardupilot-usv/Rover/mode_auto.cpp`、`ardupilot-usv/Rover/usv_sampling.cpp` |
+| MAVLink 接收、缓存、转发 | `ardupilot-usv/Rover/GCS_MAVLink_Rover.cpp`、`ardupilot-usv/Rover/USVPayload.h`、`ardupilot-usv/Rover/sensors.cpp` |
+| ROS 启动、router 与参数 | `src/usv_ros/launch/usv_bringup.launch`、`src/usv_ros/config/usv_params.yaml`、`src/usv_ros/scripts/common_env.sh` |
+| 采样或停止未收尾 | `src/usv_ros/scripts/usv_mavlink_router_bridge.py`、`src/usv_ros/scripts/mavlink_trigger_node.py`、`src/usv_ros/scripts/pump_control_node.py`。关联请求和采样握手定义在 `src/usv_ros/scripts/lib/payload_protocol.py` 与 `src/usv_ros/scripts/lib/fcu_sampling.py` |
+| QGC 命令、载荷 Fact 或面板 | `WQ-USV-QGroundControl/custom/src/FirmwarePlugin/USVFirmwarePlugin.cc`、`WQ-USV-QGroundControl/custom/src/USVPayloadFactGroup.cc`、`WQ-USV-QGroundControl/custom/res/USVPayloadPanel.qml` |
+| Web 接口、数据记录与健康状态 | `src/usv_ros/scripts/web_config_server.py`、`src/usv_ros/scripts/lib/sample_recording/`、`src/usv_ros/scripts/system_health_node.py` |
+| 地图、实验航线、液滴和科研图件 | `src/usv_ros/scripts/lib/lab_sim/`、`src/usv_ros/frontend/src/pages/Map.tsx`、`src/usv_ros/frontend/src/pages/Lab.tsx` |
+| 检测装置串口、看门狗和分光帧 | `DetFirmware/src/main.cpp`、`DetFirmware/src/control_watchdog.h`、`DetFirmware/src/protocol_packets.h`。Windows 对端在 `MotorControlApp_Pyside6/src/core/serial_manager.py` 和 `MotorControlApp_Pyside6/src/hardware/serial_reader.py` |
+
+污染物浓度、原始分光采样窗口、人工浓度录入、GeoJSON/CSV 和 IDW 热力图由 ROS/Web 维护。原始分光采样窗口由 `sample_recording` 管理。各端的测试入口见[验证矩阵](70_verification.md)。
