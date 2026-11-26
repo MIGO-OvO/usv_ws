@@ -63,7 +63,9 @@ Updated: 2026-11-23
 
 | Command | 参数 | 语义 | 主要处理 |
 |---:|---|---|---|
-| 42702 `MAV_CMD_NAV_SCRIPT_TIME` | `param1=1`。总时限优先取 `param3=1..2048` 秒，否则取 `param2`，均为 0 时取 255 秒 | 紧跟采样航点。飞控在 AUTO 内按航点坐标驻留，并通过 31021 与 ROS 交接 | `ardupilot-usv/Rover/usv_sampling.cpp`、`usv_mavlink_router_bridge.py` |
+| 42702 `MAV_CMD_NAV_SCRIPT_TIME` | `param1=1`。`param2` 和 `param3` 供旧固件使用 | 紧跟采样航点。飞控在 AUTO 内按航点坐标驻留，并通过 31021 与 ROS 交接 | `ardupilot-usv/Rover/usv_sampling.cpp`、`usv_mavlink_router_bridge.py` |
+
+新版飞控依据本次采样终态和链路状态结束驻留。对旧固件，采样总时限依次取有效的 `param3`（1 至 2048 秒）、正值 `param2` 或 255 秒默认值。地面站与 ROS 规划器沿用这些字段的编码。
 
 `V2_EXTENSION.message_type=31021` 在同一 sysid 的 FCU component 1 和 companion component 191 间寻址。payload 开头为小端 `<BBQHHH>`，依次是版本 1、操作、64 位 token、sample ID、飞控航点序号和从 0 开始的导航航点索引。索引跳过 Home 和其他任务项。
 
@@ -262,7 +264,7 @@ trigger 的每个已识别请求都必须有明确结果：通道繁忙时除 `T
 - AUTO 在采样航点的 `LOIT_RADIUS` 范围内驻留。地速 ≤0.15 m/s 且偏航角速度 ≤0.08 rad/s 持续 3 秒后启动握手。稳船超时为 30 秒。
 - bridge 在本轮 TCP 发送窗口发送 READY。收到身份匹配的 START 后投递一次。泵控接单后回 ACCEPTED，随后使用同身份的泵控状态续约。终态同时匹配 token 和 sample ID。
 - 只有 `succeeded` 和明确的 `skipped` 推进飞控任务。Web 以匹配 attempt 的最终结果关窗。拒绝启动、执行失败和清理由各自的结果字段记录。
-- 失败策略支持 LOITER、HOLD、SKIP、ABORT。LOITER 需要清理确认和可用定位。取消、未确认启动、采样总时限耗尽、伴随遥测或本次采样续约超时进入 HOLD。操作者切出 AUTO 时保留选定模式并取消对应尝试。
+- 失败策略支持 LOITER、HOLD、SKIP、ABORT。LOITER 需要清理确认和可用定位。稳船失败、启动未确认、伴随遥测或本次采样续约超时进入 HOLD。操作者切出 AUTO 时保留选定模式并取消对应尝试。
 - 旧飞控的 `USV_SMPL/USV_DONE/USV_FAIL` 由 bridge 兼容。新版 31021 终态仅在当前连接有界重发。更新前停止任务和输出，成套部署飞控和 ROS 的 bridge、trigger、pump、Web。
 
 ### safety1 本地采样事务

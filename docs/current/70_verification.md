@@ -250,7 +250,7 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 - ROS：`python -B -m unittest discover -s tests -p 'test_system_safety_contract.py'`、`test_sampling_context_contract.py`、`test_web_control_access.py`，再跑全量 `test_*.py`。
 - 串口联合黄金帧：ROS 下 `python -B -m unittest discover -s tests -p test_detector_protocol_contract.py`；完整工作区及 PySide6 可用时，将同一有效/测试/坏校验帧分片送入 ROS 和 Windows 的真实解析器比较。
 - ArduPilot 在 Linux 或 WSL 运行 `python3 -B tests/test_usv_sampling_safety.py`，检查脚本分流和 ChibiOS 随机数补齐边界。按 runbook 编译 Pixhawk6C。
-- Rover SITL 运行 `python3 -B tests/check_usv_sitl_sampling.py --binary build/sitl/bin/ardurover`。使用独立仿真进程和回环 UDP，检查成功、跳过、失败、超时、失联和模式接管。
+- Rover SITL 运行 `python3 -B tests/check_usv_sitl_sampling.py --binary build/sitl/bin/ardurover`。使用独立仿真进程和回环 UDP，检查成功、跳过、失败、启动无确认、失联和模式接管。长时场景分别越过旧航线的 255 秒与 2048 秒，收到匹配 DONE 后才继续航线。
 - DetFirmware：`python -m pytest tests -q`；Linux/WSL `python3 -B tests/test_control_watchdog_native.py`；`pio run -e nodemcu-32s`。源码测试不替代实际电机停机测试。
 - Windows：`python -m pytest tests -q`；QGC：`python -m unittest discover -s custom/tests -p test_usv_qgc_contract.py`。
 - 总仓库：`python docs/tools/check_workspace_compatibility.py`、`python -m unittest discover -s docs/tools`。
@@ -263,7 +263,8 @@ QGC 启动/普通停止离线回归：ROS 下 `python -B -m unittest discover -s
 
 | 场景 | 必须观测 |
 |---|---|
-| AUTO 内采样超时、bridge 断连、取消 | 飞控进入 HOLD、任务序号停在采样项、检测输出停止 |
+| 启动未确认、bridge 断连或采样续约超时 | 飞控进入 HOLD、任务序号停在采样项、检测输出停止 |
+| 采样持续超过旧航线时限 | 飞控维持 AUTO 驻留，收到匹配的 DONE 或 SKIP 后继续航线 |
 | ROS 失败且清理已确认 | LOITER 策略保持航点，HOLD 或 ABORT 策略停止推进 |
 | 人工切 MANUAL/RTL 后迟到失败 | 取消旧采样，保留操作者选择的飞行模式 |
 | 明确 SKIP | 匹配当前身份的 `skipped` 后推进航点 |

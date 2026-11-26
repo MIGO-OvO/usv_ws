@@ -50,7 +50,7 @@ ESP32 detector firmware
 
 飞控负责到点、稳船和任务推进。ROS 负责载荷准入、清理和记录。飞控收到同一采样身份的 DONE 或 SKIP 后继续航线，Web 依据同一 attempt 的最终结果结束记录。ESP32 `WATCHDOG1` 在主机失联时停止设备输出。
 
-- 航线定点采样使用 `MAV_CMD_NAV_SCRIPT_TIME(param1=1)`。新任务默认总时限 1800 秒，`param3=0` 时沿用旧 `param2`。
+- 航线定点采样使用 `MAV_CMD_NAV_SCRIPT_TIME(param1=1)`。飞控在驻留期间等待本次采样终态，旧航线的时限字段供旧固件使用。
 - `COMMAND_LONG 31010..31019`：手动采样、停止、暂停、恢复、校准、走航、基线、分光启停。
 - 26 个 `NAMED_VALUE_FLOAT` 载荷字段：原 22 项加 `USV_LOOP/LTOT`、`USV_ADS/PROTO`，字段清单以 `Rover/USVPayload.h` 为准。
 - 固件缓存载荷字段并以 2 Hz 转发到 GCS。
